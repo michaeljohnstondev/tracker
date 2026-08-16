@@ -14,6 +14,9 @@ import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
+import VibeCalendar from '../components/ui/VibeCalendar';
+import VibeTimePicker from '../components/ui/VibeTimePicker';
+import ItemReminders from '../components/ItemReminders';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor, fmtStart } from '../lib/format';
 
@@ -22,6 +25,12 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
 
   const [text, setText] = useState(item.text ?? '');
   const [note, setNote] = useState(item.note ?? '');
+  const [dueAt, setDueAt] = useState(item.dueAt ?? null);
+  const [reminders, setReminders] = useState(item.reminders ?? []);
+  // null | 'date' | 'time' — due dates are picked in two steps, same as a
+  // fast's start time.
+  const [dueStage, setDueStage] = useState(null);
+  const [pendingDue, setPendingDue] = useState(null);
 
   const color = resolveColor(tracker.color);
 
@@ -36,13 +45,61 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     setNote(item.note ?? '');
   }, [item.id, item.note]);
 
+  useEffect(() => {
+    setDueAt(item.dueAt ?? null);
+  }, [item.id, item.dueAt]);
+
+  useEffect(() => {
+    setReminders(item.reminders ?? []);
+  }, [item.id, item.reminders]);
+
+  const openDuePicker = useCallback(() => {
+    setPendingDue(dueAt != null ? new Date(dueAt) : new Date());
+    setDueStage('date');
+  }, [dueAt]);
+
+  const onDueDate = useCallback((date) => {
+    setPendingDue(date);
+    setDueStage('time');
+  }, []);
+
+  const onDueTime = useCallback(
+    (time) => {
+      setDueStage(null);
+      const base = pendingDue ?? new Date();
+      const combined = new Date(
+        base.getFullYear(),
+        base.getMonth(),
+        base.getDate(),
+        time.getHours(),
+        time.getMinutes(),
+        0,
+        0
+      );
+      setDueAt(combined.getTime());
+    },
+    [pendingDue]
+  );
+
+  const clearDue = useCallback(() => {
+    setDueAt(null);
+    // Reminders are offsets from the due date; without one they'd have
+    // nothing to count back from.
+    setReminders([]);
+  }, []);
+
   // What still differs from what's stored. Drives the Save button, so there's
   // a visible answer to "did that save?".
   const pendingText = text.trim();
   const pendingNote = note.trim();
+  const sameReminders =
+    reminders.length === (item.reminders ?? []).length &&
+    reminders.every((r) => (item.reminders ?? []).includes(r));
   const dirty =
     (!!pendingText && pendingText !== item.text) ||
-    pendingNote !== (item.note ?? '');
+    pendingNote !== (item.note ?? '') ||
+    dueAt !== (item.dueAt ?? null) ||
+    !sameReminders;
 
   // Writes are batched rather than per-keystroke: on a shared list every
   // character would otherwise be a Firestore write, and a sync to the other
@@ -55,8 +112,10 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     // instead of saving.
     if (t && t !== item.text) patch.text = t;
     if (n !== (item.note ?? '')) patch.note = n;
+    if (dueAt !== (item.dueAt ?? null)) patch.dueAt = dueAt;
+    if (!sameReminders) patch.reminders = reminders;
     if (Object.keys(patch).length) updateItemIn(tracker, item.id, patch);
-  }, [text, note, item, tracker, updateItemIn]);
+  }, [text, note, dueAt, reminders, sameReminders, item, tracker, updateItemIn]);
 
   // Flush on the way out. Blur alone isn't enough: hardware back and the
   // header chevron can both tear this screen down while the field still has
@@ -129,6 +188,31 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             style={styles.note}
           />
 
+          <Text style={styles.label}>Due</Text>
+          {dueAt != null ? (
+            <View style={styles.dueRow}>
+              <Pressable onPress={openDuePicker} hitSlop={8} style={styles.dueMain}>
+                <Text style={styles.dueText}>{fmtStart(dueAt)}</Text>
+              </Pressable>
+              <Pressable onPress={clearDue} hitSlop={10}>
+                <Text style={styles.dueClear}>✕</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={openDuePicker} hitSlop={8}>
+              <Text style={styles.addLink}>+ Add due date</Text>
+            </Pressable>
+          )}
+
+          <Text style={styles.label}>Reminders</Text>
+          {dueAt == null ? (
+            <Text style={styles.remindersHint}>
+              Add a due date to set reminders.
+            </Text>
+          ) : (
+            <ItemReminders value={reminders} onChange={setReminders} />
+          )}
+
           <View style={styles.saveRow}>
             {dirty ? (
               <VibeButton label="Save" variant="green" onPress={save} />
@@ -161,6 +245,25 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Mounted only while open: VibeCalendar seeds its selection once, so a
+          persistent instance would reopen on the previous pick. */}
+      {dueStage === 'date' && (
+        <VibeCalendar
+          visible
+          initialDate={pendingDue}
+          onConfirm={onDueDate}
+          onClose={() => setDueStage(null)}
+        />
+      )}
+
+      <VibeTimePicker
+        visible={dueStage === 'time'}
+        onClose={() => setDueStage(null)}
+        onConfirm={onDueTime}
+        initialTime={pendingDue}
+        confirmText="Set"
+      />
     </SafeAreaView>
   );
 }
@@ -185,6 +288,39 @@ const styles = StyleSheet.create({
   note: {
     minHeight: 110,
     textAlignVertical: 'top',
+  },
+  dueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
+    borderRadius: theme.sizes.borderRadius,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  dueMain: { flex: 1 },
+  dueText: {
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontFamily: theme.fonts.main,
+  },
+  dueClear: {
+    color: theme.colors.textSecondary,
+    fontSize: 16,
+    paddingLeft: 12,
+  },
+  addLink: {
+    color: theme.colors.vibeCyan,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
+  },
+  remindersHint: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontFamily: theme.fonts.main,
   },
   saveRow: {
     marginTop: 16,
