@@ -2,10 +2,7 @@ import {
   collection,
   doc,
   deleteDoc,
-  getDocs,
-  query,
   setDoc,
-  where,
 } from '@react-native-firebase/firestore';
 import { db } from './firebase';
 import { getMemberUids } from './lists';
@@ -24,22 +21,27 @@ import { remindAt } from '../components/ItemReminders';
 const remindersRef = () => collection(db, 'reminders');
 
 // Deterministic, so re-saving an item replaces its reminders instead of
-// accumulating duplicates.
+// accumulating duplicates — and so nothing here ever has to run a query.
+//
+// That last part is load-bearing. The read rule requires the caller to be in
+// targetUids, and Firestore rejects any query it cannot prove satisfies the
+// rule from the query's own constraints. A `where('itemId', '==', ...)` lookup
+// proves nothing about targetUids, so it is denied outright. Addressing docs
+// by id sidesteps that, and avoids a composite index too.
 const reminderId = (itemId, offsetId) => `${itemId}__${offsetId}`;
 
-async function existingForItem(itemId) {
-  const snap = await getDocs(
-    query(remindersRef(), where('itemId', '==', itemId))
-  );
-  return snap.docs;
-}
+const deleteReminder = (itemId, offsetId) =>
+  deleteDoc(doc(remindersRef(), reminderId(itemId, offsetId)));
 
-/** Remove every pending reminder for an item — deleted, completed, cleared. */
-export async function clearItemReminders(itemId) {
-  if (!itemId) return;
+/**
+ * Remove pending reminders for an item — deleted, completed, or cleared.
+ * `offsetIds` is what the item last had stored, which is the only record of
+ * what exists.
+ */
+export async function clearItemReminders(itemId, offsetIds = []) {
+  if (!itemId || !offsetIds.length) return;
   try {
-    const docs = await existingForItem(itemId);
-    await Promise.all(docs.map((d) => deleteDoc(d.ref)));
+    await Promise.all(offsetIds.map((id) => deleteReminder(itemId, id)));
   } catch (err) {
     console.log('[reminders] clear skipped:', err?.message || err);
   }
@@ -51,21 +53,29 @@ export async function clearItemReminders(itemId) {
  * Writes are not awaited against the server anywhere here — like sharing, this
  * has to work with no signal and reconcile later.
  */
-export async function syncItemReminders({ tracker, item, uid, dueAt, reminders }) {
+export async function syncItemReminders({
+  tracker,
+  item,
+  uid,
+  dueAt,
+  previous = [],
+  reminders = [],
+}) {
   if (!uid || !item?.id) return;
 
   try {
     // A completed item shouldn't nag, and neither should one with no date.
     const wanted =
-      !dueAt || item.done ? [] : (reminders || []).filter((id) => remindAt(dueAt, id) > Date.now());
+      !dueAt || item.done
+        ? []
+        : reminders.filter((id) => remindAt(dueAt, id) > Date.now());
 
-    const existing = await existingForItem(item.id);
-    const wantedIds = new Set(wanted.map((id) => reminderId(item.id, id)));
+    const keep = new Set(wanted);
 
-    // Drop anything no longer wanted, including offsets that have since
-    // become unreachable because the date moved.
+    // Drop anything no longer wanted, including offsets that became
+    // unreachable because the date moved nearer.
     await Promise.all(
-      existing.filter((d) => !wantedIds.has(d.id)).map((d) => deleteDoc(d.ref))
+      previous.filter((id) => !keep.has(id)).map((id) => deleteReminder(item.id, id))
     );
 
     if (!wanted.length) return;
@@ -92,7 +102,9 @@ export async function syncItemReminders({ tracker, item, uid, dueAt, reminders }
       )
     );
   } catch (err) {
-    // Never let reminder bookkeeping break saving the item itself.
-    console.log('[reminders] sync skipped:', err?.message || err);
+    // Never let reminder bookkeeping break saving the item itself — but log
+    // loudly. Swallowing this quietly is exactly how a denied query went
+    // unnoticed and reminders silently never got written.
+    console.error('[reminders] sync FAILED:', err?.message || err);
   }
 }

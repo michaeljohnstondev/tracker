@@ -54,9 +54,16 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     setDueAt(item.dueAt ?? null);
   }, [item.id, item.dueAt]);
 
+  // Compared by contents, not by identity. item.reminders is an array, and a
+  // fresh one arrives on every Firestore snapshot and every local tracker
+  // update — so depending on the array itself re-ran this effect constantly
+  // and wiped a reminder the moment it was added, before autosave could
+  // store it. Text, note and dueAt are primitives and don't have this problem.
+  const storedReminderKey = (item.reminders ?? []).join(',');
   useEffect(() => {
     setReminders(item.reminders ?? []);
-  }, [item.id, item.reminders]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id, storedReminderKey]);
 
   const openDuePicker = useCallback(() => {
     setPendingDue(dueAt != null ? new Date(dueAt) : new Date());
@@ -136,8 +143,16 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     updateItemIn(tracker, item.id, patch);
 
     // Keep the scheduled reminders in step. Text changes matter too — the
-    // notification carries its own copy of it.
-    syncItemReminders({ tracker, item, uid, dueAt, reminders });
+    // notification carries its own copy of it. `previous` is what was stored,
+    // which is the only record of which reminder docs currently exist.
+    syncItemReminders({
+      tracker,
+      item,
+      uid,
+      dueAt,
+      previous: item.reminders ?? [],
+      reminders,
+    });
   }, [text, note, dueAt, reminders, sameReminders, item, tracker, uid, updateItemIn]);
 
   const flushRef = useRef(save);
@@ -184,7 +199,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           onBack();
           removeItemFrom(tracker, item.id);
           // Otherwise a deleted item still buzzes you next week.
-          clearItemReminders(item.id);
+          clearItemReminders(item.id, item.reminders ?? []);
         },
       },
     ]);
