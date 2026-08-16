@@ -8,6 +8,8 @@ import { TrackerProvider, useTrackers } from './src/store/TrackerContext';
 import HomeScreen from './src/screens/HomeScreen';
 import TimerDetailScreen from './src/screens/TimerDetailScreen';
 import ListDetailScreen from './src/screens/ListDetailScreen';
+import UpdateBanner from './src/components/ui/UpdateBanner';
+import { useAppUpdate } from './src/lib/useAppUpdate';
 
 // Tiny in-app router. Two routes: the home list and a tracker detail.
 // Keeping it a plain state switch avoids pulling in a navigation library
@@ -48,6 +50,10 @@ function Router() {
 }
 
 export default function App() {
+  // Sits outside the providers: an update prompt shouldn't depend on auth or
+  // tracker state having loaded, and it must still appear if either fails.
+  const { isUpdateReady, applyUpdate } = useAppUpdate();
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
@@ -59,6 +65,9 @@ export default function App() {
             <Router />
           </TrackerProvider>
         </AuthProvider>
+        {/* Last child so it floats above the screens rather than being
+            covered by them. */}
+        <UpdateBanner visible={isUpdateReady} onRestart={applyUpdate} />
       </View>
     </SafeAreaProvider>
   );
