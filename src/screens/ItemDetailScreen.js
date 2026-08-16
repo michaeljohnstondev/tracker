@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,23 +36,43 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     setNote(item.note ?? '');
   }, [item.id, item.note]);
 
-  // Written on blur rather than per keystroke: on a shared list every
-  // character would otherwise be a Firestore write and a sync to the other
-  // person's screen.
-  const commitText = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed || trimmed === item.text) {
-      setText(item.text ?? '');
-      return;
-    }
-    updateItemIn(tracker, item.id, { text: trimmed });
-  }, [text, item, tracker, updateItemIn]);
+  // What still differs from what's stored. Drives the Save button, so there's
+  // a visible answer to "did that save?".
+  const pendingText = text.trim();
+  const pendingNote = note.trim();
+  const dirty =
+    (!!pendingText && pendingText !== item.text) ||
+    pendingNote !== (item.note ?? '');
 
-  const commitNote = useCallback(() => {
-    const trimmed = note.trim();
-    if (trimmed === (item.note ?? '')) return;
-    updateItemIn(tracker, item.id, { note: trimmed });
-  }, [note, item, tracker, updateItemIn]);
+  // Writes are batched rather than per-keystroke: on a shared list every
+  // character would otherwise be a Firestore write, and a sync to the other
+  // person's screen.
+  const save = useCallback(() => {
+    const patch = {};
+    const t = text.trim();
+    const n = note.trim();
+    // An empty name would leave an unidentifiable row, so a blank reverts
+    // instead of saving.
+    if (t && t !== item.text) patch.text = t;
+    if (n !== (item.note ?? '')) patch.note = n;
+    if (Object.keys(patch).length) updateItemIn(tracker, item.id, patch);
+  }, [text, note, item, tracker, updateItemIn]);
+
+  // Flush on the way out. Blur alone isn't enough: hardware back and the
+  // header chevron can both tear this screen down while the field still has
+  // focus, and a note typed but never blurred would just evaporate.
+  const flushRef = useRef(save);
+  flushRef.current = save;
+  const skipFlushRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      // Don't resurrect an item that was just deleted — on a shared list that
+      // write would recreate the document.
+      if (!skipFlushRef.current) flushRef.current();
+    },
+    []
+  );
 
   const confirmDelete = useCallback(() => {
     VibeAlert('Delete item', `Delete "${item.text}"?`, [
@@ -61,6 +81,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
+          skipFlushRef.current = true;
           onBack();
           removeItemFrom(tracker, item.id);
         },
@@ -90,7 +111,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           <VibeInput
             value={text}
             onChangeText={setText}
-            onBlur={commitText}
+            onBlur={save}
             placeholder="Item"
             maxLength={120}
             autoCapitalize="sentences"
@@ -100,13 +121,21 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           <VibeInput
             value={note}
             onChangeText={setNote}
-            onBlur={commitNote}
+            onBlur={save}
             placeholder="Brand, size, aisle — anything worth remembering"
             multiline
             maxLength={500}
             autoCapitalize="sentences"
             style={styles.note}
           />
+
+          <View style={styles.saveRow}>
+            {dirty ? (
+              <VibeButton label="Save" variant="green" onPress={save} />
+            ) : (
+              <Text style={styles.savedHint}>Saved</Text>
+            )}
+          </View>
 
           <View style={styles.actions}>
             <VibeButton
@@ -156,6 +185,17 @@ const styles = StyleSheet.create({
   note: {
     minHeight: 110,
     textAlignVertical: 'top',
+  },
+  saveRow: {
+    marginTop: 16,
+    minHeight: 24,
+    justifyContent: 'center',
+  },
+  savedHint: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    fontFamily: theme.fonts.main,
   },
   actions: {
     marginTop: 26,

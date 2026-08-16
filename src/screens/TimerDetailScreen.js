@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
 import VibeTimePicker from '../components/ui/VibeTimePicker';
+import VibeCalendar from '../components/ui/VibeCalendar';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import RenameModal from '../components/RenameModal';
@@ -20,12 +21,24 @@ const GOAL_PRESETS = [13, 16, 18, 20, 24];
 
 export default function TimerDetailScreen({ tracker, onBack }) {
   const { updateTracker, renameTracker, deleteTracker } = useTrackers();
-  const [pickerVisible, setPickerVisible] = useState(false);
+  // Setting a start time is two steps — date, then time — so that a fast
+  // running longer than a day can still be corrected. null means closed.
+  const [pickerStage, setPickerStage] = useState(null);
+  const [pendingDate, setPendingDate] = useState(null);
   const [renaming, setRenaming] = useState(false);
 
   const active = tracker.startMs != null;
   const now = useNow(active);
   const color = resolveColor(tracker.color);
+
+  // Must be a stable object. The picker re-seeds its selection whenever this
+  // changes identity, and this screen re-renders every second while a fast is
+  // running — so a fresh Date here wiped out whatever the user had scrolled
+  // to, once per second, making the start time impossible to edit.
+  const pickerInitialTime = useMemo(
+    () => (tracker.startMs != null ? new Date(tracker.startMs) : null),
+    [tracker.startMs]
+  );
 
   const startNow = useCallback(() => {
     updateTracker(tracker.id, { startMs: Date.now() });
@@ -40,16 +53,46 @@ export default function TimerDetailScreen({ tracker, onBack }) {
     [tracker.id, updateTracker]
   );
 
-  // VibeTimePicker returns a Date on today's date. If it lands in the
-  // future (it's 9am, you picked 8pm), you meant yesterday — roll back.
+  const openStartPicker = useCallback(() => {
+    setPendingDate(
+      tracker.startMs != null ? new Date(tracker.startMs) : new Date()
+    );
+    setPickerStage('date');
+  }, [tracker.startMs]);
+
+  const onConfirmDate = useCallback((date) => {
+    setPendingDate(date);
+    setPickerStage('time');
+  }, []);
+
+  // The date carries the day and the picker carries the clock time; combine
+  // them rather than trusting either alone. This replaces the old guess that
+  // a future time must have meant yesterday — with an explicit date there's
+  // nothing left to infer, and a multi-day fast is now expressible.
   const onConfirmTime = useCallback(
-    (date) => {
-      setPickerVisible(false);
-      let ms = date.getTime();
-      if (ms > Date.now()) ms -= 24 * 60 * 60 * 1000;
+    (time) => {
+      setPickerStage(null);
+      const base = pendingDate ?? new Date();
+      const combined = new Date(
+        base.getFullYear(),
+        base.getMonth(),
+        base.getDate(),
+        time.getHours(),
+        time.getMinutes(),
+        0,
+        0
+      );
+      const ms = combined.getTime();
+      if (ms > Date.now()) {
+        VibeAlert(
+          'That start is in the future',
+          'A timer can only start at or before the present moment.'
+        );
+        return;
+      }
       updateTracker(tracker.id, { startMs: ms });
     },
-    [tracker.id, updateTracker]
+    [pendingDate, tracker.id, updateTracker]
   );
 
   const confirmDelete = useCallback(() => {
@@ -111,11 +154,11 @@ export default function TimerDetailScreen({ tracker, onBack }) {
             )}
 
             <Pressable
-              onPress={() => setPickerVisible(true)}
+              onPress={openStartPicker}
               hitSlop={8}
               style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
             >
-              <Text style={styles.editLink}>Edit start time</Text>
+              <Text style={styles.editLink}>Edit start date & time</Text>
             </Pressable>
 
             <View style={styles.actions}>
@@ -145,18 +188,31 @@ export default function TimerDetailScreen({ tracker, onBack }) {
               <VibeButton label="Start Now" variant="green" onPress={startNow} />
               <VibeButton
                 label="I forgot — set start time"
-                onPress={() => setPickerVisible(true)}
+                onPress={openStartPicker}
               />
             </View>
           </>
         )}
       </ScrollView>
 
+      {/* Mounted only while in use: VibeCalendar seeds its selection in a
+          useState initializer, so a persistent instance would still be showing
+          whatever was picked last time. */}
+      {pickerStage === 'date' && (
+        <VibeCalendar
+          visible
+          initialDate={pendingDate}
+          maximumDate={new Date()}
+          onConfirm={onConfirmDate}
+          onClose={() => setPickerStage(null)}
+        />
+      )}
+
       <VibeTimePicker
-        visible={pickerVisible}
-        onClose={() => setPickerVisible(false)}
+        visible={pickerStage === 'time'}
+        onClose={() => setPickerStage(null)}
         onConfirm={onConfirmTime}
-        initialTime={active ? new Date(tracker.startMs) : null}
+        initialTime={pickerInitialTime}
         confirmText="Set"
       />
 

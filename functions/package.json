@@ -1,0 +1,13 @@
+{
+  "name": "tracker-functions",
+  "description": "Push notifications for shared lists",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.0"
+  }
+}

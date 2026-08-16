@@ -88,12 +88,33 @@ service cloud.firestore {
         && request.resource.data.uid == uid()
         && docId == membershipId(request.resource.data.listId)
         && (ownsList(request.resource.data.listId)
-            || inviteGrants(request.resource.data.listId, request.resource.data.usedInviteCode));
+            || inviteGrants(request.resource.data.listId, request.resource.data.usedInviteCode)
+            // Someone shared this list directly with me. The share doc uses
+            // the same {listId}_{uid} key, so it's checkable by path without
+            // a query.
+            || exists(/databases/$(database)/documents/shares/$(docId)));
 
       // Leaving a list is deleting your own row. The owner may also remove
       // someone else's.
       allow delete: if signedIn()
         && (resource.data.uid == uid() || ownsList(resource.data.listId));
+    }
+
+    // A list aimed at one specific person, rather than a code handed out to
+    // whoever. Keyed {listId}_{toUid} so the membership rule above can check
+    // for it by path. Consumed and deleted by the recipient once they join.
+    match /shares/{docId} {
+      allow read: if signedIn()
+        && (resource.data.toUid == uid() || resource.data.fromUid == uid());
+
+      allow create: if signedIn()
+        && request.resource.data.fromUid == uid()
+        && docId == request.resource.data.listId + '_' + request.resource.data.toUid
+        && isMember(request.resource.data.listId);
+
+      // The recipient clears it on joining; the sender can withdraw it.
+      allow delete: if signedIn()
+        && (resource.data.toUid == uid() || resource.data.fromUid == uid());
     }
 
     // Codes are random and unguessable; reading one reveals only a listId,
