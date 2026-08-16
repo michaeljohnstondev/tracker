@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
@@ -16,26 +16,24 @@ import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
 import RenameModal from '../components/RenameModal';
-import ReorderControls from '../components/ReorderControls';
+import ListItemRow from '../components/ListItemRow';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor } from '../lib/format';
 
-export default function ListDetailScreen({ tracker, onBack }) {
+export default function ListDetailScreen({ tracker, onBack, onOpenItem }) {
   // These operations dispatch to AsyncStorage or Firestore depending on
   // whether the list is shared — the screen doesn't need to know which.
   const {
     addItemTo,
     toggleItemIn,
-    removeItemFrom,
     clearDoneIn,
     renameTracker,
-    moveItemIn,
+    reorderItemsIn,
     deleteTracker,
   } = useTrackers();
   const [text, setText] = useState('');
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [reordering, setReordering] = useState(false);
 
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
@@ -54,11 +52,6 @@ export default function ListDetailScreen({ tracker, onBack }) {
   const toggle = useCallback(
     (itemId) => toggleItemIn(tracker, itemId),
     [tracker, toggleItemIn]
-  );
-
-  const removeItem = useCallback(
-    (itemId) => removeItemFrom(tracker, itemId),
-    [tracker, removeItemFrom]
   );
 
   const clearDone = useCallback(() => clearDoneIn(tracker), [tracker, clearDoneIn]);
@@ -130,69 +123,25 @@ export default function ListDetailScreen({ tracker, onBack }) {
           />
         </View>
 
-        {items.length > 1 && (
-          <View style={styles.toolbar}>
-            <Pressable onPress={() => setReordering((v) => !v)} hitSlop={10}>
-              <Text style={styles.reorderToggle}>
-                {reordering ? 'Done' : 'Reorder'}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        <ScrollView
+        <ReorderableList
+          data={items}
+          keyExtractor={(item) => item.id}
+          onReorder={({ from, to }) => reorderItemsIn(tracker, from, to)}
+          renderItem={({ item }) => (
+            <ListItemRow
+              item={item}
+              color={color}
+              onToggle={() => toggle(item.id)}
+              onOpen={() => onOpenItem?.(tracker.id, item.id)}
+            />
+          )}
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-        >
-          {items.length === 0 && (
+          ListEmptyComponent={
             <Text style={styles.empty}>Nothing here yet.</Text>
-          )}
-
-          {items.map((item, index) => (
-            <View key={item.id} style={styles.item}>
-              <Pressable
-                onPress={() => toggle(item.id)}
-                // While reordering the arrows are the only live control, so a
-                // stray tap can't tick something off by accident.
-                disabled={reordering}
-                style={styles.itemMain}
-                hitSlop={4}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    { borderColor: color },
-                    item.done && { backgroundColor: color },
-                  ]}
-                >
-                  {item.done && <Text style={styles.check}>✓</Text>}
-                </View>
-                <Text
-                  style={[styles.itemText, item.done && styles.itemTextDone]}
-                >
-                  {item.text}
-                </Text>
-              </Pressable>
-              {reordering ? (
-                <ReorderControls
-                  onUp={() => moveItemIn(tracker, item.id, -1)}
-                  onDown={() => moveItemIn(tracker, item.id, 1)}
-                  canUp={index > 0}
-                  canDown={index < items.length - 1}
-                />
-              ) : (
-                <Pressable
-                  onPress={() => removeItem(item.id)}
-                  hitSlop={8}
-                  style={styles.remove}
-                >
-                  <Text style={styles.removeX}>✕</Text>
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </ScrollView>
+          }
+        />
 
         {doneCount > 0 && (
           <View style={styles.footer}>

@@ -3,20 +3,14 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 import { fmtElapsedShort, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
-import ReorderControls from './ReorderControls';
+import { useReorderableDrag } from 'react-native-reorderable-list';
 
 // One row on the home screen. Shows a live summary depending on type:
 //  - timer:  running elapsed + goal, or "Not started"
 //  - list:   "3 / 7 done"
-export default function TrackerCard({
-  tracker,
-  onPress,
-  reordering,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp,
-  canMoveDown,
-}) {
+export default function TrackerCard({ tracker, onPress }) {
+  // Provided by the enclosing ReorderableList; starts a drag when called.
+  const drag = useReorderableDrag();
   const color = resolveColor(tracker.color);
   const active = tracker.type === 'timer' && tracker.startMs != null;
   const now = useNow(active);
@@ -51,13 +45,14 @@ export default function TrackerCard({
   return (
     <Pressable
       onPress={onPress}
-      // While reordering, tapping a card must not navigate away — the arrows
-      // are the only live control.
-      disabled={reordering}
+      onLongPress={drag}
+      // Below the default 500ms: a long-press to drag should feel like it
+      // catches, not like the app hesitated.
+      delayLongPress={220}
       style={({ pressed }) => [
         styles.card,
         { borderLeftColor: color },
-        pressed && !reordering && styles.pressed,
+        pressed && styles.pressed,
       ]}
     >
       <View style={styles.left}>
@@ -74,16 +69,7 @@ export default function TrackerCard({
           </Text>
         </View>
       </View>
-      {reordering ? (
-        <ReorderControls
-          onUp={onMoveUp}
-          onDown={onMoveDown}
-          canUp={canMoveUp}
-          canDown={canMoveDown}
-        />
-      ) : (
-        <Text style={styles.chevron}>›</Text>
-      )}
+      <Text style={styles.chevron}>›</Text>
     </Pressable>
   );
 }

@@ -166,6 +166,11 @@ export function reorderItems(listId, orderedItems) {
   return Promise.all(writes);
 }
 
+/** Partial update of one item — text, note, anything but its identity. */
+export function updateItem(listId, itemId, patch) {
+  return updateDoc(doc(db, 'lists', listId, 'items', itemId), patch);
+}
+
 export function setItemDone(listId, itemId, done, uid) {
   return updateDoc(doc(db, 'lists', listId, 'items', itemId), {
     done,

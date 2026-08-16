@@ -55,6 +55,14 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if signedIn();
       allow write: if signedIn() && uid() == userId;
+
+      // Push tokens and anything else that co-members have no business
+      // reading. Subcollections don't inherit the rule above, so this has to
+      // be stated separately. Cloud Functions use the Admin SDK and bypass
+      // rules entirely, so they can still read tokens to send notifications.
+      match /private/{docId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
     }
 
     match /lists/{listId} {

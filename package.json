@@ -14,6 +14,7 @@
     "@react-native-firebase/app": "^26.2.0",
     "@react-native-firebase/auth": "^26.2.0",
     "@react-native-firebase/firestore": "^26.2.0",
+    "@react-native-firebase/messaging": "^26.2.0",
     "@react-native-google-signin/google-signin": "^16.1.4",
     "expo": "^55.0.14",
     "expo-build-properties": "~55.0.16",
@@ -23,6 +24,9 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.4",
+    "react-native-gesture-handler": "~2.30.0",
+    "react-native-reanimated": "4.2.1",
+    "react-native-reorderable-list": "^0.18.1",
     "react-native-safe-area-context": "~5.6.2"
   },
   "devDependencies": {

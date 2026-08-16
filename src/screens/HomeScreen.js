@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
 import TrackerCard from '../components/TrackerCard';
@@ -10,11 +11,10 @@ import { useTrackers } from '../store/TrackerContext';
 import { useAuth } from '../store/AuthContext';
 
 export default function HomeScreen({ onOpen }) {
-  const { trackers, loaded, addTracker, moveTracker } = useTrackers();
+  const { trackers, loaded, addTracker, reorderTrackers } = useTrackers();
   const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [reordering, setReordering] = useState(false);
 
   const handleCreate = (tracker) => {
     addTracker(tracker);
@@ -35,40 +35,29 @@ export default function HomeScreen({ onOpen }) {
             </Text>
           ) : null}
         </View>
-        {/* Pointless with fewer than two cards, so it stays hidden until
-            there's actually something to rearrange. */}
+        {/* Only worth hinting at once there's something to rearrange. */}
         {trackers.length > 1 ? (
-          <Pressable onPress={() => setReordering((v) => !v)} hitSlop={10}>
-            <Text style={styles.reorderToggle}>
-              {reordering ? 'Done' : 'Reorder'}
-            </Text>
-          </Pressable>
+          <Text style={styles.hint}>Hold to reorder</Text>
         ) : null}
       </View>
 
-      <ScrollView
+      <ReorderableList
+        data={trackers}
+        keyExtractor={(t) => t.id}
+        onReorder={({ from, to }) => reorderTrackers(from, to)}
+        renderItem={({ item }) => (
+          <TrackerCard tracker={item} onPress={() => onOpen(item.id)} />
+        )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-      >
-        {loaded && trackers.length === 0 && (
-          <Text style={styles.empty}>
-            No trackers yet.{'\n'}Add one to get started.
-          </Text>
-        )}
-
-        {trackers.map((t, index) => (
-          <TrackerCard
-            key={t.id}
-            tracker={t}
-            onPress={() => onOpen(t.id)}
-            reordering={reordering}
-            onMoveUp={() => moveTracker(t.id, -1)}
-            onMoveDown={() => moveTracker(t.id, 1)}
-            canMoveUp={index > 0}
-            canMoveDown={index < trackers.length - 1}
-          />
-        ))}
-      </ScrollView>
+        ListEmptyComponent={
+          loaded ? (
+            <Text style={styles.empty}>
+              No trackers yet.{'\n'}Add one to get started.
+            </Text>
+          ) : null
+        }
+      />
 
       <View style={styles.footer}>
         <VibeButton label="+ Add Tracker" onPress={() => setAdding(true)} />
@@ -104,10 +93,10 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
-  reorderToggle: {
-    color: theme.colors.vibeCyan,
-    fontSize: 14,
-    fontWeight: '600',
+  hint: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    letterSpacing: 0.5,
     fontFamily: theme.fonts.main,
   },
   title: {

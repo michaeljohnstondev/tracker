@@ -14,6 +14,7 @@ import {
 } from '@react-native-firebase/auth';
 import { doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 import { auth, db, WEB_CLIENT_ID } from '../services/firebase';
+import { registerPushToken, unregisterPushToken } from '../services/fcm';
 
 // Configure once at module load rather than per sign-in attempt.
 GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
@@ -31,6 +32,10 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setInitializing(false);
+      // Re-register on every restore, not just at sign-in: FCM rotates tokens
+      // and a stale one fails silently, which looks exactly like "push is
+      // broken". The OS only prompts the first time, so this is quiet after.
+      if (u) registerPushToken(u.uid);
     });
     return unsub;
   }, []);
@@ -71,6 +76,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOutCompletely = useCallback(async () => {
+    // Drop the token first — once signed out the rules no longer permit
+    // writing to this user's private doc, and the token would be stranded,
+    // still receiving their notifications on this device.
+    await unregisterPushToken(auth.currentUser?.uid);
     await signOut(auth);
     // Also clear the Google session, otherwise the next sign-in silently
     // reuses the same account with no account picker — confusing on a shared

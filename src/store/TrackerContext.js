@@ -208,6 +208,17 @@ export function TrackerProvider({ children }) {
     [uid, updateTracker]
   );
 
+  const updateItemIn = useCallback(
+    (tracker, itemId, patch) => {
+      if (tracker.shared) return remote.updateItem(tracker.remoteId, itemId, patch);
+      updateTracker(tracker.id, (t) => ({
+        items: t.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
+      }));
+      return Promise.resolve();
+    },
+    [updateTracker]
+  );
+
   const removeItemFrom = useCallback(
     (tracker, itemId) => {
       if (tracker.shared) return remote.removeItem(tracker.remoteId, itemId);
@@ -230,14 +241,12 @@ export function TrackerProvider({ children }) {
     [updateTracker]
   );
 
-  // direction is -1 (up) or +1 (down). The saved order is rebuilt from what's
-  // currently on screen, so the first move also pins down every other
-  // tracker's position instead of leaving them implicitly ranked.
-  const moveTracker = useCallback((id, direction) => {
+  // The saved order is rebuilt from what's currently on screen, so the first
+  // drag also pins down every other tracker's position instead of leaving
+  // them implicitly ranked.
+  const reorderTrackers = useCallback((from, to) => {
     const ids = allRef.current.map((t) => t.id);
-    const from = ids.indexOf(id);
-    const to = from + direction;
-    if (from < 0 || to < 0 || to >= ids.length) return;
+    if (from === to || from < 0 || to < 0 || to >= ids.length) return;
 
     const next = [...ids];
     const [moved] = next.splice(from, 1);
@@ -247,12 +256,12 @@ export function TrackerProvider({ children }) {
     saveTrackerOrder(next);
   }, []);
 
-  const moveItemIn = useCallback(
-    (tracker, itemId, direction) => {
+  const reorderItemsIn = useCallback(
+    (tracker, from, to) => {
       const items = [...(tracker.items || [])];
-      const from = items.findIndex((i) => i.id === itemId);
-      const to = from + direction;
-      if (from < 0 || to < 0 || to >= items.length) return Promise.resolve();
+      if (from === to || from < 0 || to < 0 || to >= items.length) {
+        return Promise.resolve();
+      }
 
       const [moved] = items.splice(from, 1);
       items.splice(to, 0, moved);
@@ -319,11 +328,12 @@ export function TrackerProvider({ children }) {
     getTracker,
     addItemTo,
     toggleItemIn,
+    updateItemIn,
     removeItemFrom,
     clearDoneIn,
     renameTracker,
-    moveTracker,
-    moveItemIn,
+    reorderTrackers,
+    reorderItemsIn,
     shareTracker,
   };
 
