@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Tracker",
+    "slug": "tracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "tracker",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#001020",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#001020"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
