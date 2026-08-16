@@ -35,7 +35,7 @@ export default function ScreenHeader({
       <View style={styles.actions}>
         {onShare ? (
           <Pressable onPress={onShare} hitSlop={12} style={styles.action}>
-            <Text style={styles.icon}>👥</Text>
+            <Text style={styles.shareIcon}>⤴</Text>
           </Pressable>
         ) : null}
         {onDelete ? (
@@ -75,6 +75,13 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 19,
+  },
+  // The share arrow renders as thin monochrome text rather than a colour
+  // emoji, so it needs to be larger and tinted to sit level with the trash.
+  shareIcon: {
+    color: theme.colors.textPrimary,
+    fontSize: 26,
+    lineHeight: 30,
   },
   back: {
     color: theme.colors.textPrimary,

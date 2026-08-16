@@ -7,7 +7,13 @@ import React, {
   useCallback,
   useRef,
 } from 'react';
-import { loadTrackers, saveTrackers, newId } from '../lib/trackers';
+import {
+  loadTrackers,
+  saveTrackers,
+  loadTrackerOrder,
+  saveTrackerOrder,
+  newId,
+} from '../lib/trackers';
 import { useAuth } from './AuthContext';
 import * as remote from '../services/lists';
 
@@ -28,10 +34,19 @@ export function TrackerProvider({ children }) {
   const localRef = useRef([]);
   localRef.current = localTrackers;
 
+  // Explicit home-screen ordering, as a list of tracker ids. Anything not in
+  // it (a brand-new tracker, a list someone just shared with you) falls to the
+  // bottom rather than jumping into the middle unannounced.
+  const [order, setOrder] = useState([]);
+
   useEffect(() => {
     (async () => {
-      const initial = await loadTrackers();
+      const [initial, savedOrder] = await Promise.all([
+        loadTrackers(),
+        loadTrackerOrder(),
+      ]);
       setLocalTrackers(initial);
+      setOrder(savedOrder);
       setLoaded(true);
     })();
   }, []);
@@ -147,13 +162,16 @@ export function TrackerProvider({ children }) {
     [sharedById, uid]
   );
 
-  const trackers = useMemo(
-    () =>
-      [...localTrackers, ...sharedTrackers].sort(
-        (a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)
-      ),
-    [localTrackers, sharedTrackers]
-  );
+  const trackers = useMemo(() => {
+    const rank = new Map(order.map((id, index) => [id, index]));
+    return [...localTrackers, ...sharedTrackers].sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
+      const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
+      // Unranked trackers keep their old creation ordering among themselves.
+      if (ra !== rb) return ra - rb;
+      return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+    });
+  }, [localTrackers, sharedTrackers, order]);
 
   const allRef = useRef([]);
   allRef.current = trackers;
@@ -207,6 +225,40 @@ export function TrackerProvider({ children }) {
       updateTracker(tracker.id, (t) => ({
         items: t.items.filter((i) => !i.done),
       }));
+      return Promise.resolve();
+    },
+    [updateTracker]
+  );
+
+  // direction is -1 (up) or +1 (down). The saved order is rebuilt from what's
+  // currently on screen, so the first move also pins down every other
+  // tracker's position instead of leaving them implicitly ranked.
+  const moveTracker = useCallback((id, direction) => {
+    const ids = allRef.current.map((t) => t.id);
+    const from = ids.indexOf(id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+
+    const next = [...ids];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+
+    setOrder(next);
+    saveTrackerOrder(next);
+  }, []);
+
+  const moveItemIn = useCallback(
+    (tracker, itemId, direction) => {
+      const items = [...(tracker.items || [])];
+      const from = items.findIndex((i) => i.id === itemId);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= items.length) return Promise.resolve();
+
+      const [moved] = items.splice(from, 1);
+      items.splice(to, 0, moved);
+
+      if (tracker.shared) return remote.reorderItems(tracker.remoteId, items);
+      updateTracker(tracker.id, { items });
       return Promise.resolve();
     },
     [updateTracker]
@@ -270,6 +322,8 @@ export function TrackerProvider({ children }) {
     removeItemFrom,
     clearDoneIn,
     renameTracker,
+    moveTracker,
+    moveItemIn,
     shareTracker,
   };
 

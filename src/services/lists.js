@@ -67,11 +67,14 @@ export async function shareList(tracker, uid) {
   // Carry existing items across so sharing never looks like it wiped the list.
   const items = tracker.items || [];
   await Promise.all(
-    items.map((item) =>
+    items.map((item, index) =>
       setDoc(doc(db, 'lists', listId, 'items', item.id || newId()), {
         text: item.text,
         done: !!item.done,
         createdAt: item.createdAt ?? Date.now(),
+        // The local list's array order is its ordering; carry it across as
+        // explicit ranks so sharing doesn't shuffle the list.
+        order: index,
         createdBy: uid,
       })
     )
@@ -110,7 +113,15 @@ export function subscribeToItems(listId, onChange, onError) {
       const items = snap.docs.map((d) => ({ id: d.id, ...snapData(d) }));
       // Sorted here rather than with orderBy: items created offline carry a
       // local timestamp and must still slot into place before they sync.
-      items.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+      //
+      // `order` falls back to createdAt, and new items are stamped with
+      // Date.now() as their order — so an unranked item always sorts after
+      // reordered ones (which hold small integers) and lands at the bottom,
+      // with no migration pass needed over existing lists.
+      items.sort(
+        (a, b) =>
+          (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0)
+      );
       onChange(items);
     },
     onError
@@ -125,12 +136,34 @@ export function renameList(listId, name) {
 
 export function addItem(listId, text, uid) {
   const id = newId();
+  const now = Date.now();
   return setDoc(doc(db, 'lists', listId, 'items', id), {
     text,
     done: false,
-    createdAt: Date.now(),
+    createdAt: now,
+    // Far larger than any rank assigned by reordering, so new items append.
+    order: now,
     createdBy: uid,
   });
+}
+
+/**
+ * Persist a new item sequence, writing only the docs whose rank actually
+ * changed. The first reorder of a list rewrites every item (they still hold
+ * timestamp-shaped ranks from when they were added); after that an adjacent
+ * swap costs two writes instead of rewriting the list — which matters when
+ * the queue is draining over a bad connection in a shop.
+ */
+export function reorderItems(listId, orderedItems) {
+  const writes = [];
+  orderedItems.forEach((item, index) => {
+    if (item.order !== index) {
+      writes.push(
+        updateDoc(doc(db, 'lists', listId, 'items', item.id), { order: index })
+      );
+    }
+  });
+  return Promise.all(writes);
 }
 
 export function setItemDone(listId, itemId, done, uid) {

@@ -3,11 +3,20 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 import { fmtElapsedShort, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
+import ReorderControls from './ReorderControls';
 
 // One row on the home screen. Shows a live summary depending on type:
 //  - timer:  running elapsed + goal, or "Not started"
 //  - list:   "3 / 7 done"
-export default function TrackerCard({ tracker, onPress }) {
+export default function TrackerCard({
+  tracker,
+  onPress,
+  reordering,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+}) {
   const color = resolveColor(tracker.color);
   const active = tracker.type === 'timer' && tracker.startMs != null;
   const now = useNow(active);
@@ -42,10 +51,13 @@ export default function TrackerCard({ tracker, onPress }) {
   return (
     <Pressable
       onPress={onPress}
+      // While reordering, tapping a card must not navigate away — the arrows
+      // are the only live control.
+      disabled={reordering}
       style={({ pressed }) => [
         styles.card,
         { borderLeftColor: color },
-        pressed && styles.pressed,
+        pressed && !reordering && styles.pressed,
       ]}
     >
       <View style={styles.left}>
@@ -62,7 +74,16 @@ export default function TrackerCard({ tracker, onPress }) {
           </Text>
         </View>
       </View>
-      <Text style={styles.chevron}>›</Text>
+      {reordering ? (
+        <ReorderControls
+          onUp={onMoveUp}
+          onDown={onMoveDown}
+          canUp={canMoveUp}
+          canDown={canMoveDown}
+        />
+      ) : (
+        <Text style={styles.chevron}>›</Text>
+      )}
     </Pressable>
   );
 }

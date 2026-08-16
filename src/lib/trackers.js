@@ -4,6 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // its own type-specific fields; unused fields just stay null/empty.
 const KEY = 'trackers.v1';
 
+// Home-screen ordering is stored separately, as a plain list of tracker ids.
+// Keeping it out of the tracker records themselves means it can also cover
+// shared lists — whose documents are owned by Firestore and shared with other
+// people, so a personal ordering has no business living there. Two people
+// arranging their own home screens never fight over it.
+const ORDER_KEY = 'trackerOrder.v1';
+
 // Legacy keys from the original single-fast version — migrated once into
 // a "Fast" timer tracker so an in-progress fast is never lost.
 const LEGACY_START = 'fast.startMs';
@@ -72,6 +79,21 @@ export async function loadTrackers() {
 
 export async function saveTrackers(trackers) {
   await AsyncStorage.setItem(KEY, JSON.stringify(trackers));
+}
+
+export async function loadTrackerOrder() {
+  const raw = await AsyncStorage.getItem(ORDER_KEY);
+  if (raw == null) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveTrackerOrder(ids) {
+  await AsyncStorage.setItem(ORDER_KEY, JSON.stringify(ids));
 }
 
 async function migrateLegacyFast() {

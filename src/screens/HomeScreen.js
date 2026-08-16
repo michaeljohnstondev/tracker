@@ -10,10 +10,11 @@ import { useTrackers } from '../store/TrackerContext';
 import { useAuth } from '../store/AuthContext';
 
 export default function HomeScreen({ onOpen }) {
-  const { trackers, loaded, addTracker } = useTrackers();
+  const { trackers, loaded, addTracker, moveTracker } = useTrackers();
   const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const handleCreate = (tracker) => {
     addTracker(tracker);
@@ -24,13 +25,24 @@ export default function HomeScreen({ onOpen }) {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Trackers</Text>
-        {/* Only surfaced once signed in — an account is optional here, and
-            advertising one before it's needed just adds friction. */}
-        {user ? (
-          <Text style={styles.account} numberOfLines={1}>
-            {user.displayName || user.email}
-          </Text>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Trackers</Text>
+          {/* Only surfaced once signed in — an account is optional here, and
+              advertising one before it's needed just adds friction. */}
+          {user ? (
+            <Text style={styles.account} numberOfLines={1}>
+              {user.displayName || user.email}
+            </Text>
+          ) : null}
+        </View>
+        {/* Pointless with fewer than two cards, so it stays hidden until
+            there's actually something to rearrange. */}
+        {trackers.length > 1 ? (
+          <Pressable onPress={() => setReordering((v) => !v)} hitSlop={10}>
+            <Text style={styles.reorderToggle}>
+              {reordering ? 'Done' : 'Reorder'}
+            </Text>
+          </Pressable>
         ) : null}
       </View>
 
@@ -44,8 +56,17 @@ export default function HomeScreen({ onOpen }) {
           </Text>
         )}
 
-        {trackers.map((t) => (
-          <TrackerCard key={t.id} tracker={t} onPress={() => onOpen(t.id)} />
+        {trackers.map((t, index) => (
+          <TrackerCard
+            key={t.id}
+            tracker={t}
+            onPress={() => onOpen(t.id)}
+            reordering={reordering}
+            onMoveUp={() => moveTracker(t.id, -1)}
+            onMoveDown={() => moveTracker(t.id, 1)}
+            canMoveUp={index > 0}
+            canMoveDown={index < trackers.length - 1}
+          />
         ))}
       </ScrollView>
 
@@ -73,9 +94,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 8,
+  },
+  headerText: {
+    flex: 1,
+  },
+  reorderToggle: {
+    color: theme.colors.vibeCyan,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
   },
   title: {
     color: theme.colors.vibeCyan,

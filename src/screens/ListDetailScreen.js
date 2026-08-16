@@ -16,6 +16,7 @@ import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
 import RenameModal from '../components/RenameModal';
+import ReorderControls from '../components/ReorderControls';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor } from '../lib/format';
 
@@ -28,11 +29,13 @@ export default function ListDetailScreen({ tracker, onBack }) {
     removeItemFrom,
     clearDoneIn,
     renameTracker,
+    moveItemIn,
     deleteTracker,
   } = useTrackers();
   const [text, setText] = useState('');
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
@@ -127,6 +130,16 @@ export default function ListDetailScreen({ tracker, onBack }) {
           />
         </View>
 
+        {items.length > 1 && (
+          <View style={styles.toolbar}>
+            <Pressable onPress={() => setReordering((v) => !v)} hitSlop={10}>
+              <Text style={styles.reorderToggle}>
+                {reordering ? 'Done' : 'Reorder'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         <ScrollView
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
@@ -136,10 +149,13 @@ export default function ListDetailScreen({ tracker, onBack }) {
             <Text style={styles.empty}>Nothing here yet.</Text>
           )}
 
-          {items.map((item) => (
+          {items.map((item, index) => (
             <View key={item.id} style={styles.item}>
               <Pressable
                 onPress={() => toggle(item.id)}
+                // While reordering the arrows are the only live control, so a
+                // stray tap can't tick something off by accident.
+                disabled={reordering}
                 style={styles.itemMain}
                 hitSlop={4}
               >
@@ -158,13 +174,22 @@ export default function ListDetailScreen({ tracker, onBack }) {
                   {item.text}
                 </Text>
               </Pressable>
-              <Pressable
-                onPress={() => removeItem(item.id)}
-                hitSlop={8}
-                style={styles.remove}
-              >
-                <Text style={styles.removeX}>✕</Text>
-              </Pressable>
+              {reordering ? (
+                <ReorderControls
+                  onUp={() => moveItemIn(tracker, item.id, -1)}
+                  onDown={() => moveItemIn(tracker, item.id, 1)}
+                  canUp={index > 0}
+                  canDown={index < items.length - 1}
+                />
+              ) : (
+                <Pressable
+                  onPress={() => removeItem(item.id)}
+                  hitSlop={8}
+                  style={styles.remove}
+                >
+                  <Text style={styles.removeX}>✕</Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -216,6 +241,18 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1 },
   addBtn: { marginVertical: 0 },
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  reorderToggle: {
+    color: theme.colors.vibeCyan,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
+  },
   list: {
     paddingHorizontal: 20,
     paddingTop: 16,
