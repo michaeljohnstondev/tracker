@@ -1,4 +1,4 @@
-﻿// components/ui/base/VibeCalendar.jsx
+// components/ui/base/VibeCalendar.jsx
 import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, Text, ScrollView } from 'react-native';
 import theme from '../../theme/themes';
@@ -130,11 +130,11 @@ const VibeCalendar = ({
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={previousMonth} style={styles.navButton}>
-              <Text style={styles.navButtonText}>â€¹</Text>
+              <Text style={styles.navButtonText}>‹</Text>
             </TouchableOpacity>
             <Text style={styles.headerText}>{monthYear}</Text>
             <TouchableOpacity onPress={nextMonth} style={styles.navButton}>
-              <Text style={styles.navButtonText}>â€º</Text>
+              <Text style={styles.navButtonText}>›</Text>
             </TouchableOpacity>
           </View>
 
@@ -341,4 +341,3 @@ const styles = StyleSheet.create({
 });
 
 export default VibeCalendar;
-

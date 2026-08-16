@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import theme from '../../theme/themes';
 
@@ -61,7 +61,7 @@ export default function VibeDropdown({
         >
           {selectedOption ? selectedOption.label : placeholder}
         </Text>
-        <Text style={styles.arrow}>{isOpen ? 'â–²' : 'â–¼'}</Text>
+        <Text style={styles.arrow}>{isOpen ? '▲' : '▼'}</Text>
       </Pressable>
 
 
@@ -179,4 +179,3 @@ const styles = StyleSheet.create({
     // Removed purple border - keep neon blue regardless of state
   },
 });
-

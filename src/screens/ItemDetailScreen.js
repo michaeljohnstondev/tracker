@@ -16,7 +16,7 @@ import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import VibeCalendar from '../components/ui/VibeCalendar';
 import VibeTimePicker from '../components/ui/VibeTimePicker';
-import ItemReminders from '../components/ItemReminders';
+import ItemReminders, { remindAt } from '../components/ItemReminders';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor, fmtStart } from '../lib/format';
 
@@ -76,7 +76,19 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
         0,
         0
       );
-      setDueAt(combined.getTime());
+      const ms = combined.getTime();
+      // Picking today then a time earlier than now is the easy mistake the
+      // calendar's date floor can't catch.
+      if (ms <= Date.now()) {
+        VibeAlert(
+          'That time has passed',
+          'Pick a moment in the future, or nothing would ever fire.'
+        );
+        return;
+      }
+      setDueAt(ms);
+      // Drop any offsets that the new, nearer date has pushed into the past.
+      setReminders((prev) => prev.filter((id) => remindAt(ms, id) > Date.now()));
     },
     [pendingDue]
   );
@@ -188,7 +200,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             style={styles.note}
           />
 
-          <Text style={styles.label}>Due</Text>
+          <Text style={styles.label}>When</Text>
           {dueAt != null ? (
             <View style={styles.dueRow}>
               <Pressable onPress={openDuePicker} hitSlop={8} style={styles.dueMain}>
@@ -200,17 +212,21 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             </View>
           ) : (
             <Pressable onPress={openDuePicker} hitSlop={8}>
-              <Text style={styles.addLink}>+ Add due date</Text>
+              <Text style={styles.addLink}>+ Set a date & time</Text>
             </Pressable>
           )}
 
-          <Text style={styles.label}>Reminders</Text>
+          <Text style={styles.label}>Remind me before</Text>
           {dueAt == null ? (
             <Text style={styles.remindersHint}>
-              Add a due date to set reminders.
+              Set a date and time first.
             </Text>
           ) : (
-            <ItemReminders value={reminders} onChange={setReminders} />
+            <ItemReminders
+              value={reminders}
+              onChange={setReminders}
+              dueAt={dueAt}
+            />
           )}
 
           <View style={styles.saveRow}>
@@ -252,6 +268,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
         <VibeCalendar
           visible
           initialDate={pendingDue}
+          minimumDate={new Date()}
           onConfirm={onDueDate}
           onClose={() => setDueStage(null)}
         />

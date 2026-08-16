@@ -98,7 +98,15 @@ export function remindAt(dueAtMs, templateId) {
   return dueAtMs - toMinutes(parseTemplateId(templateId)) * 60 * 1000;
 }
 
-export default function ItemReminders({ value = [], onChange, disabled }) {
+export default function ItemReminders({ value = [], onChange, dueAt, disabled }) {
+  // A reminder is an offset counted back from the due moment, so a long
+  // offset on a near date lands in the past. Those are refused rather than
+  // silently accepted and never fired.
+  const isPast = useCallback(
+    (id) => dueAt != null && remindAt(dueAt, id) <= Date.now(),
+    [dueAt]
+  );
+
   const [showModal, setShowModal] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
@@ -150,16 +158,21 @@ export default function ItemReminders({ value = [], onChange, disabled }) {
       VibeAlert('Duplicate', `"${amount} ${unitLabel(amount, customUnit)}" already exists`);
       return;
     }
+    if (isPast(id)) {
+      VibeAlert(
+        'Already passed',
+        `${amount} ${unitLabel(amount, customUnit)} before this is in the past, so it would never fire.`
+      );
+      return;
+    }
     addId(id);
     closeModal();
-  }, [customAmount, customUnit, value, addId, closeModal]);
+  }, [customAmount, customUnit, value, addId, closeModal, isPast]);
 
   const remove = useCallback(
     (id) => onChange(value.filter((v) => v !== id)),
     [value, onChange]
   );
-
-  const isPresetActive = (preset) => value.includes(makeId(preset.amount, preset.unit));
 
   return (
     <View>
@@ -199,14 +212,18 @@ export default function ItemReminders({ value = [], onChange, disabled }) {
               <>
                 <View style={styles.presets}>
                   {PRESET_REMINDERS.map((preset) => {
-                    const taken = isPresetActive(preset);
+                    const id = makeId(preset.amount, preset.unit);
+                    const taken = value.includes(id);
+                    // Greyed rather than hidden, so the ladder doesn't
+                    // reshuffle as the due date moves.
+                    const past = isPast(id);
                     return (
                       <VibeButton
-                        key={`${preset.amount}${preset.unit}`}
+                        key={id}
                         label={preset.label}
                         variant="toggle"
                         color={taken ? 'green' : 'gray'}
-                        disabled={taken}
+                        disabled={taken || past}
                         onPress={() => addPreset(preset)}
                         style={styles.presetChip}
                       />
