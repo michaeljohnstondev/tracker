@@ -39,48 +39,52 @@ function snapData(snap) {
 }
 
 /**
- * Push a local list tracker up to Firestore and return its remote id.
+ * Push a local list tracker up to Firestore. Returns the new list id
+ * immediately, plus a promise that settles when the server has accepted the
+ * writes.
  *
- * The list doc and the owner's membership are written *sequentially*, not in
- * a batch: the membership rule calls get() on the list to confirm ownership,
- * and a batch is evaluated against pre-batch state, so the list has to be
- * committed first or the membership write is rejected.
+ * Deliberately does NOT await between writes. Firestore resolves a write
+ * promise only on server acknowledgement, so awaiting here hangs indefinitely
+ * offline — and any write after the await would never even be queued. Issuing
+ * them back-to-back puts them all in the offline queue in order, which is what
+ * makes sharing work on a bad connection at all.
+ *
+ * Order still matters: the membership rule does a get() on the list to confirm
+ * ownership, and Firestore replays queued writes in order, so the list doc
+ * lands before the membership that depends on it.
  */
-export async function shareList(tracker, uid) {
+export function shareList(tracker, uid) {
   const listRef = doc(collection(db, 'lists'));
   const listId = listRef.id;
 
-  await setDoc(listRef, {
-    name: tracker.name,
-    color: tracker.color,
-    ownerUid: uid,
-    createdAt: Date.now(),
-  });
-
-  await setDoc(doc(db, 'memberships', membershipId(listId, uid)), {
-    listId,
-    uid,
-    role: 'owner',
-    joinedAt: Date.now(),
-  });
-
-  // Carry existing items across so sharing never looks like it wiped the list.
-  const items = tracker.items || [];
-  await Promise.all(
-    items.map((item, index) =>
+  const writes = [
+    setDoc(listRef, {
+      name: tracker.name,
+      color: tracker.color,
+      ownerUid: uid,
+      createdAt: Date.now(),
+    }),
+    setDoc(doc(db, 'memberships', membershipId(listId, uid)), {
+      listId,
+      uid,
+      role: 'owner',
+      joinedAt: Date.now(),
+    }),
+    // Carry existing items across so sharing never looks like it wiped the
+    // list. The local array order becomes explicit ranks.
+    ...(tracker.items || []).map((item, index) =>
       setDoc(doc(db, 'lists', listId, 'items', item.id || newId()), {
         text: item.text,
         done: !!item.done,
+        note: item.note ?? '',
         createdAt: item.createdAt ?? Date.now(),
-        // The local list's array order is its ordering; carry it across as
-        // explicit ranks so sharing doesn't shuffle the list.
         order: index,
         createdBy: uid,
       })
-    )
-  );
+    ),
+  ];
 
-  return listId;
+  return { listId, settled: Promise.all(writes) };
 }
 
 /** Live view of every list this user belongs to. */

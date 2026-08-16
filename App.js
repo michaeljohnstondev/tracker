@@ -84,6 +84,7 @@ function Router() {
         tracker={tracker}
         onBack={goHome}
         onOpenItem={openItem}
+        onOpenTracker={openTracker}
       />
     );
   }

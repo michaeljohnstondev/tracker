@@ -288,18 +288,38 @@ export function TrackerProvider({ children }) {
 
   // ---- Sharing ------------------------------------------------------------
 
-  // Publish a local list, then drop the local copy — the subscription above
-  // brings it straight back as a shared tracker, so the user sees it move
-  // rather than duplicate.
+  // Publish a local list and hand back the id it will appear under.
+  //
+  // The local copy is deliberately NOT deleted here. Deleting it unmounts
+  // whatever screen is showing it — taking the still-open share sheet with it,
+  // which on Android leaves a black window. The caller drops it via
+  // finalizeShare once the sheet is closed.
   const shareTracker = useCallback(
-    async (tracker) => {
+    (tracker) => {
       if (!uid) throw new Error('Sign in to share a list.');
-      if (tracker.shared) return tracker.remoteId;
-      const listId = await remote.shareList(tracker, uid);
-      deleteLocalTracker(tracker.id);
-      return listId;
+      if (tracker.shared) {
+        return { remoteId: tracker.remoteId, trackerId: tracker.id };
+      }
+
+      const { listId, settled } = remote.shareList(tracker, uid);
+      // Surface a genuine rejection (permissions, say) rather than letting it
+      // become an unhandled promise. A pending write offline is not an error.
+      settled.catch((err) =>
+        console.log('[trackers] share writes failed:', err?.message || err)
+      );
+
+      return { remoteId: listId, trackerId: remoteKey(listId) };
     },
-    [uid, deleteLocalTracker]
+    [uid]
+  );
+
+  // Drop the now-duplicated local copy. Safe to call more than once.
+  const finalizeShare = useCallback(
+    (localId) => {
+      if (!localId || localId.startsWith('remote:')) return;
+      deleteLocalTracker(localId);
+    },
+    [deleteLocalTracker]
   );
 
   const deleteTracker = useCallback(
@@ -335,6 +355,7 @@ export function TrackerProvider({ children }) {
     reorderTrackers,
     reorderItemsIn,
     shareTracker,
+    finalizeShare,
   };
 
   return (

@@ -20,7 +20,12 @@ import ListItemRow from '../components/ListItemRow';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor } from '../lib/format';
 
-export default function ListDetailScreen({ tracker, onBack, onOpenItem }) {
+export default function ListDetailScreen({
+  tracker,
+  onBack,
+  onOpenItem,
+  onOpenTracker,
+}) {
   // These operations dispatch to AsyncStorage or Firestore depending on
   // whether the list is shared — the screen doesn't need to know which.
   const {
@@ -29,6 +34,7 @@ export default function ListDetailScreen({ tracker, onBack, onOpenItem }) {
     clearDoneIn,
     renameTracker,
     reorderItemsIn,
+    finalizeShare,
     deleteTracker,
   } = useTrackers();
   const [text, setText] = useState('');
@@ -55,6 +61,22 @@ export default function ListDetailScreen({ tracker, onBack, onOpenItem }) {
   );
 
   const clearDone = useCallback(() => clearDoneIn(tracker), [tracker, clearDoneIn]);
+
+  // Everything that happens *after* sharing is deferred to here, once the
+  // sheet has closed. Switching route and deleting the local copy while the
+  // sheet was still mounted was what left a black screen: the modal went away
+  // with the screen that owned it, instead of being dismissed first.
+  const handleShareClose = useCallback(
+    (result) => {
+      setSharing(false);
+      if (!result?.publishedId) return;
+      // Move to the shared list first, so nothing is pointing at the local
+      // copy by the time it's removed.
+      onOpenTracker?.(`remote:${result.publishedId}`);
+      finalizeShare(result.localId);
+    },
+    [onOpenTracker, finalizeShare]
+  );
 
   const confirmDelete = useCallback(() => {
     // Leaving someone else's list is not the same as deleting it, and the
@@ -155,7 +177,7 @@ export default function ListDetailScreen({ tracker, onBack, onOpenItem }) {
       <ShareListModal
         visible={sharing}
         tracker={tracker}
-        onClose={() => setSharing(false)}
+        onClose={handleShareClose}
       />
 
       <RenameModal

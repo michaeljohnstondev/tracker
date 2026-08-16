@@ -24,13 +24,22 @@ export default function ShareListModal({ visible, tracker, onClose }) {
 
   const [working, setWorking] = useState(false);
   const [code, setCode] = useState(null);
+  // Set once this sheet publishes the list. The `tracker` prop still points at
+  // the local copy at that moment — the shared one only exists after the
+  // subscription delivers it — so the sheet tracks the new id itself rather
+  // than waiting for a prop that would arrive a render or two later.
+  const [publishedId, setPublishedId] = useState(null);
 
   // A code belongs to one sharing session; don't leak it across opens.
   useEffect(() => {
-    if (!visible) setCode(null);
+    if (!visible) {
+      setCode(null);
+      setPublishedId(null);
+    }
   }, [visible]);
 
-  const isShared = !!tracker?.shared;
+  const isShared = !!tracker?.shared || !!publishedId;
+  const remoteId = tracker?.remoteId ?? publishedId;
 
   const handleSignIn = useCallback(async () => {
     try {
@@ -40,23 +49,21 @@ export default function ShareListModal({ visible, tracker, onClose }) {
     }
   }, [signIn]);
 
-  const handlePublish = useCallback(async () => {
-    setWorking(true);
+  const handlePublish = useCallback(() => {
     try {
-      await shareTracker(tracker);
-      // The list re-appears via its live subscription; leave the sheet open so
-      // the user can immediately mint a code for it.
+      // Returns immediately — the writes go to Firestore's queue rather than
+      // being awaited, so this works offline and can't hang the sheet.
+      const { remoteId: newId } = shareTracker(tracker);
+      setPublishedId(newId);
     } catch (e) {
       VibeAlert('Could not share', e?.message ?? 'Please try again.');
-    } finally {
-      setWorking(false);
     }
   }, [shareTracker, tracker]);
 
   const handleInvite = useCallback(async () => {
     setWorking(true);
     try {
-      const generated = await createInvite(tracker.remoteId, user.uid);
+      const generated = await createInvite(remoteId, user.uid);
       setCode(generated);
       await Share.share({
         message:
@@ -69,7 +76,14 @@ export default function ShareListModal({ visible, tracker, onClose }) {
     } finally {
       setWorking(false);
     }
-  }, [tracker, user]);
+  }, [tracker, remoteId, user]);
+
+  // Hand the newly-published id back on the way out, so the screen underneath
+  // can switch to the shared list and drop the local copy — after this sheet
+  // is gone, never while it's on screen.
+  const handleClose = useCallback(() => {
+    onClose(publishedId ? { publishedId, localId: tracker?.id } : null);
+  }, [onClose, publishedId, tracker]);
 
   const spinner = working || busy;
 
@@ -78,9 +92,9 @@ export default function ShareListModal({ visible, tracker, onClose }) {
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={styles.overlay} onPress={handleClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Share “{tracker?.name}”</Text>
 
@@ -146,7 +160,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
             />
           )}
 
-          <Pressable onPress={onClose} hitSlop={8}>
+          <Pressable onPress={handleClose} hitSlop={8}>
             <Text style={styles.cancel}>Done</Text>
           </Pressable>
         </Pressable>
