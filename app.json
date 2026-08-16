@@ -13,10 +13,22 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#001020"
-      }
+      },
+      "package": "com.bigvibestudiosadmin.tracker"
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cba1bbd2-ea1b-43ba-9300-586e38408a48"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/cba1bbd2-ea1b-43ba-9300-586e38408a48"
     }
   }
 }
