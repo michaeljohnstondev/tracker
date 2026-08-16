@@ -15,16 +15,24 @@ import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
+import RenameModal from '../components/RenameModal';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor } from '../lib/format';
 
 export default function ListDetailScreen({ tracker, onBack }) {
   // These operations dispatch to AsyncStorage or Firestore depending on
   // whether the list is shared — the screen doesn't need to know which.
-  const { addItemTo, toggleItemIn, removeItemFrom, clearDoneIn, deleteTracker } =
-    useTrackers();
+  const {
+    addItemTo,
+    toggleItemIn,
+    removeItemFrom,
+    clearDoneIn,
+    renameTracker,
+    deleteTracker,
+  } = useTrackers();
   const [text, setText] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
@@ -83,6 +91,7 @@ export default function ListDetailScreen({ tracker, onBack }) {
         title={tracker.name}
         color={color}
         onBack={onBack}
+        onRename={() => setRenaming(true)}
         onShare={() => setSharing(true)}
         onDelete={confirmDelete}
       />
@@ -173,6 +182,13 @@ export default function ListDetailScreen({ tracker, onBack }) {
         visible={sharing}
         tracker={tracker}
         onClose={() => setSharing(false)}
+      />
+
+      <RenameModal
+        visible={renaming}
+        initialName={tracker.name}
+        onClose={() => setRenaming(false)}
+        onSubmit={(name) => renameTracker(tracker, name)}
       />
     </SafeAreaView>
   );

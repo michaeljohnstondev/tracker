@@ -6,6 +6,7 @@ import VibeButton from '../components/ui/VibeButton';
 import VibeTimePicker from '../components/ui/VibeTimePicker';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
+import RenameModal from '../components/RenameModal';
 import { useTrackers } from '../store/TrackerContext';
 import { useNow } from '../lib/useNow';
 import {
@@ -18,8 +19,9 @@ import {
 const GOAL_PRESETS = [13, 16, 18, 20, 24];
 
 export default function TimerDetailScreen({ tracker, onBack }) {
-  const { updateTracker, deleteTracker } = useTrackers();
+  const { updateTracker, renameTracker, deleteTracker } = useTrackers();
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const active = tracker.startMs != null;
   const now = useNow(active);
@@ -69,6 +71,7 @@ export default function TimerDetailScreen({ tracker, onBack }) {
         title={tracker.name}
         color={color}
         onBack={onBack}
+        onRename={() => setRenaming(true)}
         onDelete={confirmDelete}
       />
 
@@ -155,6 +158,13 @@ export default function TimerDetailScreen({ tracker, onBack }) {
         onConfirm={onConfirmTime}
         initialTime={active ? new Date(tracker.startMs) : null}
         confirmText="Set"
+      />
+
+      <RenameModal
+        visible={renaming}
+        initialName={tracker.name}
+        onClose={() => setRenaming(false)}
+        onSubmit={(name) => renameTracker(tracker, name)}
       />
     </SafeAreaView>
   );

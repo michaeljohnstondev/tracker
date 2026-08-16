@@ -212,6 +212,19 @@ export function TrackerProvider({ children }) {
     [updateTracker]
   );
 
+  const renameTracker = useCallback(
+    (tracker, name) => {
+      const trimmed = name.trim();
+      // Silently ignoring an empty name is friendlier than an error dialog:
+      // the modal simply closes and nothing changes.
+      if (!trimmed || trimmed === tracker.name) return Promise.resolve();
+      if (tracker.shared) return remote.renameList(tracker.remoteId, trimmed);
+      updateTracker(tracker.id, { name: trimmed });
+      return Promise.resolve();
+    },
+    [updateTracker]
+  );
+
   // ---- Sharing ------------------------------------------------------------
 
   // Publish a local list, then drop the local copy — the subscription above
@@ -256,6 +269,7 @@ export function TrackerProvider({ children }) {
     toggleItemIn,
     removeItemFrom,
     clearDoneIn,
+    renameTracker,
     shareTracker,
   };
 

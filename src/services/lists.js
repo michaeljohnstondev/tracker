@@ -117,6 +117,12 @@ export function subscribeToItems(listId, onChange, onError) {
   );
 }
 
+// Any member can rename a shared list — it's a shared object, and needing to
+// chase the owner to fix a typo would be worse than the rare surprise.
+export function renameList(listId, name) {
+  return updateDoc(doc(db, 'lists', listId), { name });
+}
+
 export function addItem(listId, text, uid) {
   const id = newId();
   return setDoc(doc(db, 'lists', listId, 'items', id), {
