@@ -28,8 +28,11 @@ export default function TrackerCard({ tracker, onPress }) {
       summary = 'Not started';
     }
   } else {
-    const total = tracker.items.length;
-    const done = tracker.items.filter((i) => i.done).length;
+    // A shared list's items arrive on a separate subscription to its
+    // metadata, so the card can render for a beat before items exist.
+    const items = tracker.items || [];
+    const total = items.length;
+    const done = items.filter((i) => i.done).length;
     summary = total === 0 ? 'Empty' : `${done} / ${total} done`;
     if (total > 0 && done === total) accent = theme.colors.vibeGreen;
   }
@@ -48,9 +51,12 @@ export default function TrackerCard({ tracker, onPress }) {
       <View style={styles.left}>
         <Text style={[styles.icon, { color }]}>{icon}</Text>
         <View style={styles.text}>
-          <Text style={styles.name} numberOfLines={1}>
-            {tracker.name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>
+              {tracker.name}
+            </Text>
+            {tracker.shared ? <Text style={styles.sharedBadge}>👥</Text> : null}
+          </View>
           <Text style={[styles.summary, { color: accent }]} numberOfLines={1}>
             {summary}
           </Text>
@@ -92,11 +98,20 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   name: {
     color: theme.colors.textPrimary,
     fontSize: 17,
     fontWeight: '600',
+    flexShrink: 1,
     fontFamily: theme.fonts.main,
+  },
+  sharedBadge: {
+    fontSize: 12,
+    marginLeft: 7,
   },
   summary: {
     fontSize: 14,

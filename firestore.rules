@@ -1,0 +1,100 @@
+rules_version = '2';
+
+// Data model
+// ----------
+// users/{uid}                      profile shown to co-members of a list
+// lists/{listId}                   name, color, ownerUid
+// lists/{listId}/items/{itemId}    one doc per item, so concurrent edits merge
+// memberships/{listId}_{uid}       one doc per person per list
+// invites/{code}                   short random code -> listId
+//
+// Membership is its own collection rather than an array on the list, because
+// a joiner cannot read the list before they belong to it — so they could
+// never compute "existing members + me" to write back. Here they simply
+// create their *own* membership doc, and the rules verify the invite code
+// server-side. It also means no reliance on arrayUnion resolving inside
+// rules, and "which lists are mine" becomes a plain indexed query.
+//
+// Everything works on the free Spark plan: no Cloud Functions involved.
+// Knowing an invite code is the entire authorization to join.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function membershipId(listId) {
+      return listId + '_' + uid();
+    }
+
+    function isMember(listId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/memberships/$(membershipId(listId)));
+    }
+
+    function ownsList(listId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/lists/$(listId)).data.ownerUid == uid();
+    }
+
+    // An invite code is the shared secret. Holding one that points at this
+    // list is what authorizes joining it.
+    function inviteGrants(listId, code) {
+      return exists(/databases/$(database)/documents/invites/$(code))
+        && get(/databases/$(database)/documents/invites/$(code)).data.listId == listId;
+    }
+
+    // Readable by any signed-in user so a list can show who ticked an item
+    // off; writable only by the person it describes.
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && uid() == userId;
+    }
+
+    match /lists/{listId} {
+      allow read: if isMember(listId);
+      allow create: if signedIn() && request.resource.data.ownerUid == uid();
+      allow update: if isMember(listId) && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if signedIn() && resource.data.ownerUid == uid();
+
+      match /items/{itemId} {
+        allow read, write: if isMember(listId);
+      }
+    }
+
+    match /memberships/{docId} {
+      // Members may read their own row, and read rows of lists they belong to
+      // (so the app can show who else is on a list).
+      allow read: if signedIn()
+        && (resource.data.uid == uid() || isMember(resource.data.listId));
+
+      // You may only ever create your own membership, at the canonical id, and
+      // only if you either own the list or hold a valid invite to it.
+      allow create: if signedIn()
+        && request.resource.data.uid == uid()
+        && docId == membershipId(request.resource.data.listId)
+        && (ownsList(request.resource.data.listId)
+            || inviteGrants(request.resource.data.listId, request.resource.data.usedInviteCode));
+
+      // Leaving a list is deleting your own row. The owner may also remove
+      // someone else's.
+      allow delete: if signedIn()
+        && (resource.data.uid == uid() || ownsList(resource.data.listId));
+    }
+
+    // Codes are random and unguessable; reading one reveals only a listId,
+    // which is useless on its own — joining still creates a membership that
+    // gets re-checked above.
+    match /invites/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isMember(request.resource.data.listId);
+      allow delete: if signedIn() && isMember(resource.data.listId);
+    }
+  }
+}

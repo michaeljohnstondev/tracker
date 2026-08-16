@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
 import TrackerCard from '../components/TrackerCard';
 import AddTrackerModal from '../components/AddTrackerModal';
+import JoinListModal from '../components/JoinListModal';
 import { useTrackers } from '../store/TrackerContext';
+import { useAuth } from '../store/AuthContext';
 
 export default function HomeScreen({ onOpen }) {
   const { trackers, loaded, addTracker } = useTrackers();
+  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   const handleCreate = (tracker) => {
     addTracker(tracker);
@@ -21,6 +25,13 @@ export default function HomeScreen({ onOpen }) {
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Text style={styles.title}>Trackers</Text>
+        {/* Only surfaced once signed in — an account is optional here, and
+            advertising one before it's needed just adds friction. */}
+        {user ? (
+          <Text style={styles.account} numberOfLines={1}>
+            {user.displayName || user.email}
+          </Text>
+        ) : null}
       </View>
 
       <ScrollView
@@ -40,6 +51,9 @@ export default function HomeScreen({ onOpen }) {
 
       <View style={styles.footer}>
         <VibeButton label="+ Add Tracker" onPress={() => setAdding(true)} />
+        <Pressable onPress={() => setJoining(true)} hitSlop={8}>
+          <Text style={styles.joinLink}>Join with code</Text>
+        </Pressable>
       </View>
 
       <AddTrackerModal
@@ -47,6 +61,8 @@ export default function HomeScreen({ onOpen }) {
         onClose={() => setAdding(false)}
         onCreate={handleCreate}
       />
+
+      <JoinListModal visible={joining} onClose={() => setJoining(false)} />
     </SafeAreaView>
   );
 }
@@ -83,8 +99,22 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: theme.fonts.main,
   },
+  account: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+    fontFamily: theme.fonts.main,
+  },
   footer: {
     paddingHorizontal: 24,
     paddingBottom: 8,
+  },
+  joinLink: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 10,
+    textDecorationLine: 'underline',
+    fontFamily: theme.fonts.main,
   },
 });

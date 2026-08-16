@@ -5,10 +5,10 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
+  ScrollView,
 } from 'react-native';
 import theme from '../theme/themes';
+import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import VibeSegmentedControl from './ui/VibeSegmentedControl';
@@ -26,6 +26,14 @@ const TYPE_OPTIONS = [
 
 const GOAL_PRESETS = [13, 16, 18, 20, 24];
 
+// The two types get named for completely different reasons — a timer is a
+// thing you're measuring, a list is a thing you're collecting — so a single
+// blended example ends up suggesting neither well.
+const NAME_PLACEHOLDER = {
+  timer: 'e.g. Fast, Workout, Screen time',
+  list: 'e.g. Groceries, Packing, Chores',
+};
+
 // A Vibe-styled form for creating a tracker. Slides up from the bottom;
 // tapping the dimmed backdrop cancels. Resets its fields each time it
 // opens so a cancelled draft doesn't linger.
@@ -34,6 +42,7 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
   const [type, setType] = useState('timer');
   const [color, setColor] = useState(TRACKER_COLORS[0]);
   const [goalHours, setGoalHours] = useState(16);
+  const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
     setName('');
@@ -68,16 +77,23 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
       onRequestClose={handleClose}
     >
       <Pressable style={styles.overlay} onPress={handleClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.kav}
+        <Pressable
+          style={[styles.sheet, { paddingBottom: 34 + keyboardHeight }]}
+          onPress={(e) => e.stopPropagation()}
         >
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          {/* Scrollable so that on a short screen — where the form plus the
+              keyboard is taller than the display — the colour row and Create
+              button stay reachable rather than being pushed off-screen. */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
             <Text style={styles.title}>New Tracker</Text>
 
             <Text style={styles.label}>Name</Text>
             <VibeInput
-              placeholder="e.g. Fast, Shopping, Water plants"
+              placeholder={NAME_PLACEHOLDER[type]}
               value={name}
               onChangeText={setName}
               autoFocus
@@ -139,8 +155,8 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
                 <Text style={styles.cancel}>Cancel</Text>
               </Pressable>
             </View>
-          </Pressable>
-        </KeyboardAvoidingView>
+          </ScrollView>
+        </Pressable>
       </Pressable>
     </Modal>
   );
@@ -152,9 +168,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
-  kav: {
-    width: '100%',
-  },
   sheet: {
     backgroundColor: theme.colors.background,
     borderTopLeftRadius: 24,
@@ -163,7 +176,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
-    paddingBottom: 34,
+    // Capped so the inner ScrollView actually has somewhere to scroll once the
+    // keyboard is up; paddingBottom is applied inline from the keyboard height.
+    maxHeight: '90%',
   },
   title: {
     color: theme.colors.vibeCyan,

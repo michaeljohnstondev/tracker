@@ -14,13 +14,17 @@ import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
+import ShareListModal from '../components/ShareListModal';
 import { useTrackers } from '../store/TrackerContext';
-import { newId } from '../lib/trackers';
 import { resolveColor } from '../lib/format';
 
 export default function ListDetailScreen({ tracker, onBack }) {
-  const { updateTracker, deleteTracker } = useTrackers();
+  // These operations dispatch to AsyncStorage or Firestore depending on
+  // whether the list is shared — the screen doesn't need to know which.
+  const { addItemTo, toggleItemIn, removeItemFrom, clearDoneIn, deleteTracker } =
+    useTrackers();
   const [text, setText] = useState('');
+  const [sharing, setSharing] = useState(false);
 
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
@@ -29,43 +33,49 @@ export default function ListDetailScreen({ tracker, onBack }) {
   const addItem = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const item = { id: newId(), text: trimmed, done: false };
-    updateTracker(tracker.id, (t) => ({ items: [...t.items, item] }));
+    // Clear the field immediately rather than awaiting the write: on a shared
+    // list that write may be queued offline, and the item still shows up
+    // locally from Firestore's own cache.
     setText('');
-  }, [text, tracker.id, updateTracker]);
+    addItemTo(tracker, trimmed);
+  }, [text, tracker, addItemTo]);
 
   const toggle = useCallback(
-    (itemId) => {
-      updateTracker(tracker.id, (t) => ({
-        items: t.items.map((i) =>
-          i.id === itemId ? { ...i, done: !i.done } : i
-        ),
-      }));
-    },
-    [tracker.id, updateTracker]
+    (itemId) => toggleItemIn(tracker, itemId),
+    [tracker, toggleItemIn]
   );
 
   const removeItem = useCallback(
-    (itemId) => {
-      updateTracker(tracker.id, (t) => ({
-        items: t.items.filter((i) => i.id !== itemId),
-      }));
-    },
-    [tracker.id, updateTracker]
+    (itemId) => removeItemFrom(tracker, itemId),
+    [tracker, removeItemFrom]
   );
 
-  const clearDone = useCallback(() => {
-    updateTracker(tracker.id, (t) => ({
-      items: t.items.filter((i) => !i.done),
-    }));
-  }, [tracker.id, updateTracker]);
+  const clearDone = useCallback(() => clearDoneIn(tracker), [tracker, clearDoneIn]);
 
   const confirmDelete = useCallback(() => {
-    VibeAlert('Delete tracker', `Delete "${tracker.name}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => { onBack(); deleteTracker(tracker.id); } },
-    ]);
-  }, [tracker.id, tracker.name, deleteTracker, onBack]);
+    // Leaving someone else's list is not the same as deleting it, and the
+    // wording has to make that unmistakable before the tap.
+    const leaving = tracker.shared && !tracker.isOwner;
+    VibeAlert(
+      leaving ? 'Leave list' : 'Delete tracker',
+      leaving
+        ? `Leave "${tracker.name}"? It stays on everyone else's phone.`
+        : tracker.shared
+          ? `Delete "${tracker.name}" for everyone sharing it?`
+          : `Delete "${tracker.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: leaving ? 'Leave' : 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onBack();
+            deleteTracker(tracker);
+          },
+        },
+      ]
+    );
+  }, [tracker, deleteTracker, onBack]);
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
@@ -73,8 +83,15 @@ export default function ListDetailScreen({ tracker, onBack }) {
         title={tracker.name}
         color={color}
         onBack={onBack}
+        onShare={() => setSharing(true)}
         onDelete={confirmDelete}
       />
+
+      {tracker.shared && (
+        <Text style={styles.sharedNote}>
+          Shared · changes sync live
+        </Text>
+      )}
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -151,6 +168,12 @@ export default function ListDetailScreen({ tracker, onBack }) {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <ShareListModal
+        visible={sharing}
+        tracker={tracker}
+        onClose={() => setSharing(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -158,6 +181,16 @@ export default function ListDetailScreen({ tracker, onBack }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
+  sharedNote: {
+    color: theme.colors.vibeCyan,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 4,
+    fontFamily: theme.fonts.main,
+  },
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -3,6 +3,7 @@ import { View, BackHandler } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import theme from './src/theme/themes';
+import { AuthProvider } from './src/store/AuthContext';
 import { TrackerProvider, useTrackers } from './src/store/TrackerContext';
 import HomeScreen from './src/screens/HomeScreen';
 import TimerDetailScreen from './src/screens/TimerDetailScreen';
@@ -51,9 +52,13 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="light" />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <TrackerProvider>
-          <Router />
-        </TrackerProvider>
+        {/* Auth wraps trackers: the tracker store subscribes to shared lists
+            keyed on the signed-in uid, so it has to read auth state. */}
+        <AuthProvider>
+          <TrackerProvider>
+            <Router />
+          </TrackerProvider>
+        </AuthProvider>
       </View>
     </SafeAreaProvider>
   );

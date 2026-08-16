@@ -14,7 +14,8 @@
       "adaptiveIcon": {
         "backgroundColor": "#001020"
       },
-      "package": "com.bigvibestudiosadmin.tracker"
+      "package": "com.bigvibestudiosadmin.tracker",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro"
@@ -29,6 +30,12 @@
     },
     "updates": {
       "url": "https://u.expo.dev/cba1bbd2-ea1b-43ba-9300-586e38408a48"
-    }
+    },
+    "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-google-signin/google-signin",
+      "expo-build-properties"
+    ]
   }
 }

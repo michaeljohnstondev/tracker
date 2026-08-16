@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 
 // Detail-screen top bar: a back chevron, a centered title tinted with the
-// tracker's color, and an optional trash action on the right.
-export default function ScreenHeader({ title, color, onBack, onDelete }) {
+// tracker's color, and optional share / trash actions on the right.
+export default function ScreenHeader({ title, color, onBack, onShare, onDelete }) {
   return (
     <View style={styles.row}>
       <Pressable onPress={onBack} hitSlop={12} style={styles.side}>
@@ -16,14 +16,20 @@ export default function ScreenHeader({ title, color, onBack, onDelete }) {
       >
         {title}
       </Text>
-      <Pressable
-        onPress={onDelete}
-        hitSlop={12}
-        style={styles.side}
-        disabled={!onDelete}
-      >
-        {onDelete ? <Text style={styles.trash}>🗑</Text> : null}
-      </Pressable>
+      {/* Reserve the right slot even with no actions so the title stays
+          optically centered against the back chevron. */}
+      <View style={styles.actions}>
+        {onShare ? (
+          <Pressable onPress={onShare} hitSlop={12} style={styles.action}>
+            <Text style={styles.icon}>👥</Text>
+          </Pressable>
+        ) : null}
+        {onDelete ? (
+          <Pressable onPress={onDelete} hitSlop={12} style={styles.action}>
+            <Text style={styles.icon}>🗑</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -40,6 +46,21 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  actions: {
+    minWidth: 44,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  action: {
+    width: 40,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  icon: {
+    fontSize: 19,
   },
   back: {
     color: theme.colors.textPrimary,
