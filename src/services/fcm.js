@@ -5,6 +5,7 @@ import {
   getToken,
   deleteToken,
   requestPermission,
+  hasPermission,
   onMessage,
   setBackgroundMessageHandler,
   AuthorizationStatus,
@@ -39,23 +40,47 @@ try {
 // bypasses rules, so they can still read it.
 const tokenRef = (uid) => doc(db, 'users', uid, 'private', 'push');
 
-export async function requestPushPermission() {
-  const status = await requestPermission(messaging);
+function isGranted(status) {
   return (
     status === AuthorizationStatus.AUTHORIZED ||
     status === AuthorizationStatus.PROVISIONAL
   );
 }
 
+/** Current permission, without ever showing the OS dialog. */
+export async function hasPushPermission() {
+  try {
+    return isGranted(await hasPermission(messaging));
+  } catch {
+    return false;
+  }
+}
+
+/** Shows the OS dialog if permission hasn't been decided yet. */
+export async function requestPushPermission() {
+  return isGranted(await requestPermission(messaging));
+}
+
 /**
- * Ask for permission, fetch the token, and store it against the user.
- * Returns the token, or null if permission was refused or unavailable.
+ * Store this device's token against the user.
+ *
+ * Two paths on purpose. The silent one (the default) refreshes an existing
+ * registration and never shows a dialog — FCM rotates tokens, and a stale one
+ * fails silently in a way that looks exactly like "push is broken". The
+ * prompting one is reserved for moments where the user has just done
+ * something that implies they want notifying.
+ *
+ * Asking at cold start, before the user has done anything needing it, is the
+ * reliable way to earn a permanent denial — and Android only offers the
+ * dialog once. bvs-app's own fcmService carries the same warning.
  */
-export async function registerPushToken(uid) {
+export async function registerPushToken(uid, { prompt = false } = {}) {
   if (!uid) return null;
   try {
-    const granted = await requestPushPermission();
-    if (!granted) return null;
+    if (!(await hasPushPermission())) {
+      if (!prompt) return null;
+      if (!(await requestPushPermission())) return null;
+    }
 
     if (Platform.OS === 'ios') {
       await registerDeviceForRemoteMessages(messaging);
@@ -90,6 +115,15 @@ export async function unregisterPushToken(uid) {
   } catch (err) {
     console.log('[fcm] unregisterPushToken skipped:', err?.message || err);
   }
+}
+
+/**
+ * Call at a moment that justifies the ask — setting a reminder, sharing a
+ * list, joining one. Safe to call repeatedly: once permission exists this is
+ * just a token refresh, and once refused Android won't re-prompt anyway.
+ */
+export function ensurePushPermission(uid) {
+  return registerPushToken(uid, { prompt: true });
 }
 
 /** Foreground messages don't hit the tray; surface them via the callback. */

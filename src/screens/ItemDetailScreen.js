@@ -7,6 +7,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../theme/themes';
@@ -18,10 +19,14 @@ import VibeCalendar from '../components/ui/VibeCalendar';
 import VibeTimePicker from '../components/ui/VibeTimePicker';
 import ItemReminders, { remindAt } from '../components/ItemReminders';
 import { useTrackers } from '../store/TrackerContext';
+import { useAuth } from '../store/AuthContext';
+import { ensurePushPermission } from '../services/fcm';
+import { syncItemReminders, clearItemReminders } from '../services/reminders';
 import { resolveColor, fmtStart } from '../lib/format';
 
 export default function ItemDetailScreen({ tracker, item, onBack }) {
   const { updateItemIn, toggleItemIn, removeItemFrom } = useTrackers();
+  const { uid } = useAuth();
 
   const [text, setText] = useState(item.text ?? '');
   const [note, setNote] = useState(item.note ?? '');
@@ -126,24 +131,47 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     if (n !== (item.note ?? '')) patch.note = n;
     if (dueAt !== (item.dueAt ?? null)) patch.dueAt = dueAt;
     if (!sameReminders) patch.reminders = reminders;
-    if (Object.keys(patch).length) updateItemIn(tracker, item.id, patch);
-  }, [text, note, dueAt, reminders, sameReminders, item, tracker, updateItemIn]);
+    if (!Object.keys(patch).length) return;
 
-  // Flush on the way out. Blur alone isn't enough: hardware back and the
-  // header chevron can both tear this screen down while the field still has
-  // focus, and a note typed but never blurred would just evaporate.
+    updateItemIn(tracker, item.id, patch);
+
+    // Keep the scheduled reminders in step. Text changes matter too — the
+    // notification carries its own copy of it.
+    syncItemReminders({ tracker, item, uid, dueAt, reminders });
+  }, [text, note, dueAt, reminders, sameReminders, item, tracker, uid, updateItemIn]);
+
   const flushRef = useRef(save);
   flushRef.current = save;
   const skipFlushRef = useRef(false);
 
-  useEffect(
-    () => () => {
-      // Don't resurrect an item that was just deleted — on a shared list that
-      // write would recreate the document.
-      if (!skipFlushRef.current) flushRef.current();
-    },
-    []
-  );
+  // Don't resurrect an item that was just deleted — on a shared list that
+  // write would recreate the document.
+  const flushNow = useCallback(() => {
+    if (!skipFlushRef.current) flushRef.current();
+  }, []);
+
+  // Autosave once typing has stopped, so there's nothing to press. The delay
+  // is what stops this being a Firestore write per keystroke.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const timer = setTimeout(flushNow, 2000);
+    // Re-running each keystroke restarts the timer, which is the point.
+    return () => clearTimeout(timer);
+  }, [dirty, save, flushNow]);
+
+  // Two safety nets, because the timer alone loses work in two real cases.
+  // Unmount covers hardware back and the header chevron, which tear the screen
+  // down mid-delay. Leaving the foreground covers the app being closed or
+  // swiped away before the timer fires — at which point the process dies and
+  // neither the timer nor the unmount cleanup would ever run.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') flushNow();
+    });
+    return () => sub.remove();
+  }, [flushNow]);
+
+  useEffect(() => () => flushNow(), [flushNow]);
 
   const confirmDelete = useCallback(() => {
     VibeAlert('Delete item', `Delete "${item.text}"?`, [
@@ -155,6 +183,8 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           skipFlushRef.current = true;
           onBack();
           removeItemFrom(tracker, item.id);
+          // Otherwise a deleted item still buzzes you next week.
+          clearItemReminders(item.id);
         },
       },
     ]);
@@ -200,42 +230,19 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             style={styles.note}
           />
 
-          <Text style={styles.label}>When</Text>
-          {dueAt != null ? (
-            <View style={styles.dueRow}>
-              <Pressable onPress={openDuePicker} hitSlop={8} style={styles.dueMain}>
-                <Text style={styles.dueText}>{fmtStart(dueAt)}</Text>
-              </Pressable>
-              <Pressable onPress={clearDue} hitSlop={10}>
-                <Text style={styles.dueClear}>✕</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable onPress={openDuePicker} hitSlop={8}>
-              <Text style={styles.addLink}>+ Set a date & time</Text>
-            </Pressable>
-          )}
-
-          <Text style={styles.label}>Remind me before</Text>
-          {dueAt == null ? (
-            <Text style={styles.remindersHint}>
-              Set a date and time first.
-            </Text>
-          ) : (
-            <ItemReminders
-              value={reminders}
-              onChange={setReminders}
-              dueAt={dueAt}
-            />
-          )}
-
-          <View style={styles.saveRow}>
-            {dirty ? (
-              <VibeButton label="Save" variant="green" onPress={save} />
-            ) : (
-              <Text style={styles.savedHint}>Saved</Text>
-            )}
-          </View>
+          <Text style={styles.label}>Reminders</Text>
+          <ItemReminders
+            value={reminders}
+            onChange={(next) => {
+              // Asking here is self-explanatory: the user has just said they
+              // want to be told about something.
+              if (next.length > reminders.length) ensurePushPermission(uid);
+              setReminders(next);
+            }}
+            dueAt={dueAt}
+            onPickDate={openDuePicker}
+            onClearDate={clearDue}
+          />
 
           <View style={styles.actions}>
             <VibeButton
@@ -305,50 +312,6 @@ const styles = StyleSheet.create({
   note: {
     minHeight: 110,
     textAlignVertical: 'top',
-  },
-  dueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.inputBackground,
-    borderWidth: 1,
-    borderColor: theme.colors.inputBorder,
-    borderRadius: theme.sizes.borderRadius,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-  },
-  dueMain: { flex: 1 },
-  dueText: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontFamily: theme.fonts.main,
-  },
-  dueClear: {
-    color: theme.colors.textSecondary,
-    fontSize: 16,
-    paddingLeft: 12,
-  },
-  addLink: {
-    color: theme.colors.vibeCyan,
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
-  remindersHint: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontFamily: theme.fonts.main,
-  },
-  saveRow: {
-    marginTop: 16,
-    minHeight: 24,
-    justifyContent: 'center',
-  },
-  savedHint: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
-    fontFamily: theme.fonts.main,
   },
   actions: {
     marginTop: 26,

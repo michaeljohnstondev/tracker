@@ -14,6 +14,7 @@ import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
 import { useTrackers } from '../store/TrackerContext';
 import { createInvite } from '../services/lists';
+import { ensurePushPermission } from '../services/fcm';
 
 // Three states in one sheet, because they're really one flow: sign in ->
 // publish the list -> hand someone a code. Showing them as separate screens
@@ -55,10 +56,13 @@ export default function ShareListModal({ visible, tracker, onClose }) {
       // being awaited, so this works offline and can't hang the sheet.
       const { remoteId: newId } = shareTracker(tracker);
       setPublishedId(newId);
+      // A justified moment to ask: from here on, someone else can change this
+      // list, which is precisely what a notification would tell you about.
+      ensurePushPermission(user?.uid);
     } catch (e) {
       VibeAlert('Could not share', e?.message ?? 'Please try again.');
     }
-  }, [shareTracker, tracker]);
+  }, [shareTracker, tracker, user]);
 
   const handleInvite = useCallback(async () => {
     setWorking(true);

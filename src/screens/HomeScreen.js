@@ -8,11 +8,9 @@ import TrackerCard from '../components/TrackerCard';
 import AddTrackerModal from '../components/AddTrackerModal';
 import JoinListModal from '../components/JoinListModal';
 import { useTrackers } from '../store/TrackerContext';
-import { useAuth } from '../store/AuthContext';
 
 export default function HomeScreen({ onOpen }) {
   const { trackers, loaded, addTracker, reorderTrackers } = useTrackers();
-  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
   const [joining, setJoining] = useState(false);
 
@@ -25,20 +23,7 @@ export default function HomeScreen({ onOpen }) {
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Trackers</Text>
-          {/* Only surfaced once signed in — an account is optional here, and
-              advertising one before it's needed just adds friction. */}
-          {user ? (
-            <Text style={styles.account} numberOfLines={1}>
-              {user.displayName || user.email}
-            </Text>
-          ) : null}
-        </View>
-        {/* Only worth hinting at once there's something to rearrange. */}
-        {trackers.length > 1 ? (
-          <Text style={styles.hint}>Hold to reorder</Text>
-        ) : null}
+        <Text style={styles.title}>Trackers</Text>
       </View>
 
       <ReorderableList
@@ -83,21 +68,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 12,
     paddingBottom: 8,
-  },
-  headerText: {
-    flex: 1,
-  },
-  hint: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    letterSpacing: 0.5,
-    fontFamily: theme.fonts.main,
   },
   title: {
     color: theme.colors.vibeCyan,
@@ -119,12 +92,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 80,
     lineHeight: 24,
-    fontFamily: theme.fonts.main,
-  },
-  account: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
     fontFamily: theme.fonts.main,
   },
   footer: {

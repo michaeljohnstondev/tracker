@@ -14,6 +14,7 @@ import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
 import { redeemInvite } from '../services/lists';
+import { ensurePushPermission } from '../services/fcm';
 
 // Redeem an invite code. On success the list arrives on its own via the
 // membership subscription, so there's nothing to hand back to the caller.
@@ -39,6 +40,9 @@ export default function JoinListModal({ visible, onClose }) {
     setWorking(true);
     try {
       await redeemInvite(code, user.uid);
+      // Joining someone else's list is the clearest signal yet that changes
+      // by other people are worth being told about.
+      ensurePushPermission(user.uid);
       onClose();
     } catch (e) {
       VibeAlert('Could not join', e?.message ?? 'Check the code and try again.');

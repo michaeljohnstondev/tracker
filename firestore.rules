@@ -100,6 +100,23 @@ service cloud.firestore {
         && (resource.data.uid == uid() || ownsList(resource.data.listId));
     }
 
+    // A pending reminder. Self-contained on purpose: it carries its own copy
+    // of the text and the people to notify, so the sweep never has to read the
+    // item — which is what lets reminders work on device-local trackers that
+    // were never uploaded.
+    match /reminders/{docId} {
+      allow read, update, delete: if signedIn() && uid() in resource.data.targetUids;
+      allow create: if signedIn()
+        && uid() in request.resource.data.targetUids
+        && request.resource.data.fireAt is number;
+    }
+
+    // Private backup of a user's own trackers. Nobody else can see these —
+    // sharing a list is a separate, deliberate act.
+    match /users/{userId}/trackers/{trackerId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
     // A list aimed at one specific person, rather than a code handed out to
     // whoever. Keyed {listId}_{toUid} so the membership rule above can check
     // for it by path. Consumed and deleted by the recipient once they join.

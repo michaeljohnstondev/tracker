@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
+  TouchableOpacity,
   Modal,
   Keyboard,
 } from 'react-native';
@@ -12,7 +12,7 @@ import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import VibeDropdown from './ui/VibeDropdown';
 import VibeAlert from './ui/VibeAlert';
-import { useKeyboardHeight } from '../lib/useKeyboardHeight';
+import { fmtStart } from '../lib/format';
 
 // Reminder offsets, ported from bvs-app's ReminderListSection. The preset
 // ladder, the template-id scheme ("15m", "1d", "2h"), the parse/format helpers
@@ -98,7 +98,14 @@ export function remindAt(dueAtMs, templateId) {
   return dueAtMs - toMinutes(parseTemplateId(templateId)) * 60 * 1000;
 }
 
-export default function ItemReminders({ value = [], onChange, dueAt, disabled }) {
+export default function ItemReminders({
+  value = [],
+  onChange,
+  dueAt,
+  onPickDate,
+  onClearDate,
+  disabled,
+}) {
   // A reminder is an offset counted back from the due moment, so a long
   // offset on a near date lands in the past. Those are refused rather than
   // silently accepted and never fired.
@@ -111,7 +118,6 @@ export default function ItemReminders({ value = [], onChange, dueAt, disabled })
   const [showCustom, setShowCustom] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
   const [customUnit, setCustomUnit] = useState('minutes');
-  const keyboardHeight = useKeyboardHeight();
 
   const active = value
     .map(parseTemplateId)
@@ -175,205 +181,329 @@ export default function ItemReminders({ value = [], onChange, dueAt, disabled })
   );
 
   return (
-    <View>
-      {active.length === 0 ? (
-        <Text style={styles.empty}>No reminders</Text>
-      ) : (
-        active.map((template) => (
-          <View key={template.id} style={styles.row}>
-            <Text style={styles.rowText}>{template.label} before</Text>
-            <Pressable onPress={() => remove(template.id)} hitSlop={10}>
-              <Text style={styles.remove}>✕</Text>
-            </Pressable>
-          </View>
-        ))
-      )}
+    <>
+      {/* One card, one heading. The date is the first row rather than its own
+          titled section — reminders are offsets from it, so they belong to the
+          same block. */}
+      <View style={styles.card}>
+        {dueAt == null ? (
+          <TouchableOpacity onPress={onPickDate} style={styles.addRow}>
+            <Text style={styles.addRowText}>+ Set date & time</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <View style={[styles.row, styles.rowBorder]}>
+              <TouchableOpacity onPress={onPickDate} style={styles.dateMain}>
+                <Text style={styles.rowLabel}>{fmtStart(dueAt)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onClearDate}
+                style={styles.deleteBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.deleteBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-      <Pressable onPress={() => setShowModal(true)} hitSlop={8} disabled={disabled}>
-        <Text style={[styles.add, disabled && styles.addDisabled]}>
-          + Add reminder
-        </Text>
-      </Pressable>
+            {active.length === 0 && (
+              <View style={[styles.row, styles.rowBorder]}>
+                <Text style={styles.emptyText}>No reminders set</Text>
+              </View>
+            )}
+
+            {active.map((template) => (
+              <View key={template.id} style={[styles.row, styles.rowBorder]}>
+                <Text style={styles.rowLabel}>{template.label} before</Text>
+                <TouchableOpacity
+                  onPress={() => remove(template.id)}
+                  style={styles.deleteBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.deleteBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <TouchableOpacity
+              onPress={() => setShowModal(true)}
+              style={styles.addRow}
+              disabled={disabled}
+            >
+              <Text style={styles.addRowText}>+ Add Reminder</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
       <Modal
         visible={showModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={closeModal}
       >
-        <Pressable style={styles.overlay} onPress={closeModal}>
-          <Pressable
-            style={[styles.sheet, { paddingBottom: 34 + keyboardHeight }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.title}>Add a reminder</Text>
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={closeModal}
+        >
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Add Reminder</Text>
+
+            <View style={styles.presetGrid}>
+              {PRESET_REMINDERS.map((preset) => {
+                const id = makeId(preset.amount, preset.unit);
+                const taken = value.includes(id);
+                // Dimmed rather than removed, so the ladder keeps its shape
+                // as the date moves around.
+                const past = isPast(id);
+                const dim = taken || past;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    style={[styles.presetBtn, dim && styles.presetBtnActive]}
+                    onPress={() => !dim && addPreset(preset)}
+                    disabled={dim}
+                  >
+                    <Text
+                      style={[styles.presetText, dim && styles.presetTextActive]}
+                    >
+                      {preset.label}
+                    </Text>
+                    {taken && <Text style={styles.checkmark}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
             {!showCustom ? (
-              <>
-                <View style={styles.presets}>
-                  {PRESET_REMINDERS.map((preset) => {
-                    const id = makeId(preset.amount, preset.unit);
-                    const taken = value.includes(id);
-                    // Greyed rather than hidden, so the ladder doesn't
-                    // reshuffle as the due date moves.
-                    const past = isPast(id);
-                    return (
-                      <VibeButton
-                        key={id}
-                        label={preset.label}
-                        variant="toggle"
-                        color={taken ? 'green' : 'gray'}
-                        disabled={taken || past}
-                        onPress={() => addPreset(preset)}
-                        style={styles.presetChip}
-                      />
-                    );
-                  })}
-                </View>
-                <Pressable onPress={() => setShowCustom(true)} hitSlop={8}>
-                  <Text style={styles.customLink}>Custom…</Text>
-                </Pressable>
-              </>
+              <TouchableOpacity
+                onPress={() => setShowCustom(true)}
+                style={styles.customToggle}
+              >
+                <Text style={styles.customToggleText}>Custom Time</Text>
+              </TouchableOpacity>
             ) : (
-              <>
-                <Text style={styles.label}>How long before?</Text>
+              <View style={styles.customForm}>
                 <View style={styles.customRow}>
                   <VibeInput
                     value={customAmount}
-                    onChangeText={setCustomAmount}
-                    placeholder="10"
-                    keyboardType="number-pad"
+                    onChangeText={(t) => setCustomAmount(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="numeric"
                     maxLength={3}
                     autoFocus
-                    style={styles.amountInput}
+                    style={styles.customInput}
+                    autoComplete="off"
+                    textContentType="none"
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    spellCheck={false}
                   />
-                  <View style={styles.unitPicker}>
-                    <VibeDropdown
-                      options={UNIT_OPTIONS}
-                      selectedValue={customUnit}
-                      onSelect={setCustomUnit}
-                    />
-                  </View>
+                  <VibeDropdown
+                    options={UNIT_OPTIONS}
+                    selectedValue={customUnit}
+                    onSelect={setCustomUnit}
+                    placeholder="Unit"
+                    style={styles.customDropdown}
+                    hideSelectedFromList
+                  />
                 </View>
-                <View style={styles.actions}>
-                  <VibeButton label="Add" variant="green" onPress={addCustom} />
-                </View>
-              </>
+                <VibeButton
+                  label="Add Custom"
+                  onPress={addCustom}
+                  variant="toggle"
+                  color="green"
+                  disabled={!customAmount || parseInt(customAmount, 10) <= 0}
+                  style={styles.customAddBtn}
+                />
+              </View>
             )}
 
-            <Pressable onPress={closeModal} hitSlop={8}>
-              <Text style={styles.cancel}>Cancel</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
+            <TouchableOpacity onPress={closeModal} style={styles.cancelBtn}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
-    </View>
+    </>
   );
 }
 
+// Styles ported from bvs-app's ReminderListSection so the two apps look the
+// same. Only change: fontFamily uses theme.fonts.main, since tracker's theme
+// has no comicBold.
 const styles = StyleSheet.create({
-  empty: {
-    color: theme.colors.textSecondary,
-    fontSize: 15,
-    fontFamily: theme.fonts.main,
+  card: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: theme.sizes.borderRadius,
+    borderWidth: 3,
+    borderColor: theme.colors.vibeBlue,
+    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.inputBackground,
-    borderWidth: 1,
-    borderColor: theme.colors.inputBorder,
-    borderRadius: theme.sizes.borderRadius,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  rowText: {
+  rowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.inputBorder,
+  },
+  rowLabel: {
     color: theme.colors.textPrimary,
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '500',
     fontFamily: theme.fonts.main,
   },
-  remove: {
+  emptyText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+    fontFamily: theme.fonts.main,
+  },
+  dateMain: {
+    flex: 1,
+  },
+  deleteBtn: {
+    padding: 4,
+  },
+  deleteBtnText: {
     color: theme.colors.textSecondary,
     fontSize: 16,
-  },
-  add: {
-    color: theme.colors.vibeCyan,
-    fontSize: 15,
     fontWeight: '600',
-    marginTop: 6,
-    fontFamily: theme.fonts.main,
   },
-  addDisabled: {
-    color: theme.colors.textSecondary,
+  addRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  addRowText: {
+    color: theme.colors.vibeBlue,
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
-  sheet: {
-    backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
-    paddingHorizontal: 24,
-    paddingTop: 22,
+  modalCard: {
+    backgroundColor: '#001020',
+    borderRadius: theme.sizes.borderRadius,
+    borderWidth: 3,
+    borderColor: theme.colors.vibeBlue,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
   },
-  title: {
-    color: theme.colors.vibeCyan,
+  modalTitle: {
+    color: theme.colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
+    marginBottom: 20,
+    textAlign: 'center',
     fontFamily: theme.fonts.main,
-    marginBottom: 16,
   },
-  presets: {
+  presetGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
+    justifyContent: 'center',
   },
-  presetChip: {
-    minWidth: 76,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  presetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 198, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: theme.colors.vibeBlue,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minWidth: 90,
+    justifyContent: 'center',
   },
-  customLink: {
-    color: theme.colors.vibeCyan,
-    fontSize: 15,
-    marginTop: 18,
+  presetBtnActive: {
+    backgroundColor: 'rgba(0, 198, 255, 0.05)',
+    borderColor: theme.colors.inputBorder,
+  },
+  presetText: {
+    color: theme.colors.vibeBlue,
+    fontSize: 14,
+    fontWeight: '600',
     fontFamily: theme.fonts.main,
   },
-  label: {
+  presetTextActive: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+  },
+  checkmark: {
+    color: theme.colors.vibeGreen,
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.inputBorder,
+  },
+  dividerText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    marginHorizontal: 12,
     fontFamily: theme.fonts.main,
+  },
+  customToggle: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  customToggleText: {
+    color: theme.colors.vibeCyan,
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
+  },
+  customForm: {
+    gap: 12,
   },
   customRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: 12,
+    zIndex: 99,
+    elevation: 99,
   },
-  amountInput: {
-    width: 90,
+  customInput: {
+    width: 70,
     textAlign: 'center',
   },
-  unitPicker: {
+  customDropdown: {
     flex: 1,
   },
-  actions: {
-    marginTop: 20,
-    alignItems: 'stretch',
+  customAddBtn: {
+    marginTop: 4,
   },
-  cancel: {
-    color: theme.colors.textSecondary,
-    fontSize: 15,
-    textAlign: 'center',
+  cancelBtn: {
+    alignItems: 'center',
     marginTop: 16,
+    paddingVertical: 8,
+  },
+  cancelText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '500',
     fontFamily: theme.fonts.main,
   },
 });

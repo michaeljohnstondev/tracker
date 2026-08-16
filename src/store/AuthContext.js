@@ -32,9 +32,10 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setInitializing(false);
-      // Re-register on every restore, not just at sign-in: FCM rotates tokens
-      // and a stale one fails silently, which looks exactly like "push is
-      // broken". The OS only prompts the first time, so this is quiet after.
+      // Silent by design — refreshes a rotated token if permission already
+      // exists, and never raises a dialog. The ask happens at moments that
+      // justify it (setting a reminder, sharing, joining), because Android
+      // offers that dialog exactly once and a cold-start prompt gets denied.
       if (u) registerPushToken(u.uid);
     });
     return unsub;

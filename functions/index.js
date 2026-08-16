@@ -1,4 +1,5 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
@@ -28,15 +29,19 @@ async function actorName(uid) {
   return data?.displayName || data?.email || 'Someone';
 }
 
-/** Every member of a list except the one who triggered the event. */
-async function otherMemberUids(listId, actorUid) {
+/** Everyone currently on a list. */
+async function listMemberUids(listId) {
   const snap = await db
     .collection('memberships')
     .where('listId', '==', listId)
     .get();
-  return snap.docs
-    .map((d) => d.data().uid)
-    .filter((uid) => uid && uid !== actorUid);
+  return snap.docs.map((d) => d.data().uid).filter(Boolean);
+}
+
+/** Every member of a list except the one who triggered the event. */
+async function otherMemberUids(listId, actorUid) {
+  const uids = await listMemberUids(listId);
+  return uids.filter((uid) => uid !== actorUid);
 }
 
 /**
@@ -145,6 +150,64 @@ exports.onListShared = onDocumentCreated(
       body: `${name} shared ${listName} with you`,
       data: { type: 'list_shared', listId: share.listId },
     });
+  }
+);
+
+// Fires due reminders. Runs on a schedule rather than a trigger because
+// nothing happens in the database at the moment a reminder comes due.
+//
+// Reminder docs are deleted once sent, so "fireAt has passed" is the entire
+// query — one auto-indexed field, no status flag, and a failed send simply
+// leaves the doc in place to be retried on the next pass.
+exports.sweepReminders = onSchedule(
+  { region: REGION, schedule: 'every 5 minutes' },
+  async () => {
+    const snap = await db
+      .collection('reminders')
+      .where('fireAt', '<=', Date.now())
+      .limit(200)
+      .get();
+
+    if (snap.empty) return;
+
+    for (const docSnap of snap.docs) {
+      const reminder = docSnap.data();
+      try {
+        const label = reminder.trackerName
+          ? `${reminder.trackerName}`
+          : 'Reminder';
+
+        // Membership is read now rather than trusted from when the reminder
+        // was saved. Someone who joined the list since would otherwise never
+        // be told, and someone who left would still be. Unlike the activity
+        // notifications there's no actor to exclude — whoever set the
+        // reminder wants it too.
+        const recipients = reminder.listId
+          ? await listMemberUids(reminder.listId)
+          : reminder.targetUids || [];
+
+        const result = await pushToUsers(recipients, {
+          title: label,
+          body: reminder.itemText || 'Reminder',
+          data: {
+            type: 'reminder',
+            itemId: reminder.itemId || '',
+            listId: reminder.listId || '',
+          },
+        });
+
+        if (!result.sent && recipients.length) {
+          // Nobody had a usable token — most likely notification permission
+          // was never granted. Logged rather than retried: a reminder is
+          // tied to a moment, and re-attempting it every five minutes
+          // forever helps no one.
+          console.log('[sweepReminders] no recipients for', docSnap.id);
+        }
+        await docSnap.ref.delete();
+      } catch (err) {
+        console.error('[sweepReminders] failed for', docSnap.id, err);
+      }
+    }
   }
 );
 
