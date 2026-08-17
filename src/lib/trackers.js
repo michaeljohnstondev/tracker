@@ -16,6 +16,20 @@ const ORDER_KEY = 'trackerOrder.v1';
 const LEGACY_START = 'fast.startMs';
 const LEGACY_GOAL = 'fast.goalHours';
 
+// Categories are a flat label rather than real nesting. Folders inside
+// folders would raise questions with no good answer — whether a shared list
+// can live in a private folder, what reordering means across levels — and a
+// household app doesn't need that depth to stop the home screen sprawling.
+export const TRACKER_CATEGORIES = ['Goals', 'To-do', 'Shopping', 'Health', 'Other'];
+
+// Anything created before categories existed reads as this.
+export const DEFAULT_CATEGORY = 'Other';
+
+export const categoryOf = (tracker) =>
+  TRACKER_CATEGORIES.includes(tracker?.category)
+    ? tracker.category
+    : DEFAULT_CATEGORY;
+
 export const TRACKER_COLORS = [
   'vibeBlue',
   'vibeGreen',
@@ -35,12 +49,13 @@ export function newId() {
   ).toString(36)}`;
 }
 
-export function makeTimerTracker({ name, color, goalHours = 16 }) {
+export function makeTimerTracker({ name, color, goalHours = 16, category = DEFAULT_CATEGORY }) {
   return {
     id: newId(),
     type: 'timer',
     name,
     color,
+    category,
     createdAt: Date.now(),
     startMs: null,
     goalHours,
@@ -48,12 +63,13 @@ export function makeTimerTracker({ name, color, goalHours = 16 }) {
   };
 }
 
-export function makeListTracker({ name, color }) {
+export function makeListTracker({ name, color, category = DEFAULT_CATEGORY }) {
   return {
     id: newId(),
     type: 'list',
     name,
     color,
+    category,
     createdAt: Date.now(),
     startMs: null,
     goalHours: null,
@@ -79,6 +95,27 @@ export async function loadTrackers() {
 
 export async function saveTrackers(trackers) {
   await AsyncStorage.setItem(KEY, JSON.stringify(trackers));
+}
+
+// Category lives on the device, keyed by tracker id, rather than on the list
+// document — the same reasoning as ordering. It's personal shelving: a list
+// you file under Shopping may be Health to whoever you share it with. It also
+// means a shared list, which has no local record, can still be filed.
+const CATEGORY_KEY = 'trackerCategories.v1';
+
+export async function loadTrackerCategories() {
+  const raw = await AsyncStorage.getItem(CATEGORY_KEY);
+  if (raw == null) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveTrackerCategories(map) {
+  await AsyncStorage.setItem(CATEGORY_KEY, JSON.stringify(map));
 }
 
 export async function loadTrackerOrder() {

@@ -24,6 +24,39 @@ const reminderId = (itemId, at) => `${itemId}__${at}`;
 const deleteReminder = (itemId, at) =>
   deleteDoc(doc(remindersRef(), reminderId(itemId, at)));
 
+// A timer's goal is just an alarm at a known future moment, so it reuses the
+// same collection and the same sweep. One per tracker, replaced whenever the
+// start time or goal changes, deleted when the timer stops.
+const goalId = (tracker) => `goal__${tracker.remoteId ?? tracker.id}`;
+
+export async function syncGoalReminder({ tracker, uid, startMs, goalHours }) {
+  if (!uid || !tracker?.id) return;
+
+  const ref = doc(remindersRef(), goalId(tracker));
+  const fireAt =
+    startMs != null && goalHours ? startMs + goalHours * 3600 * 1000 : null;
+
+  try {
+    // No running timer, no goal, or a goal already passed — nothing to fire.
+    if (fireAt == null || fireAt <= Date.now()) {
+      await deleteDoc(ref);
+      return;
+    }
+
+    await setDoc(ref, {
+      itemId: tracker.remoteId ?? tracker.id,
+      listId: tracker?.shared ? tracker.remoteId : null,
+      trackerName: tracker.name ?? '',
+      itemText: `${goalHours}h reached — you can eat`,
+      targetUids: [uid],
+      fireAt,
+      createdBy: uid,
+    });
+  } catch (err) {
+    console.error('[reminders] goal sync failed:', err?.message || err);
+  }
+}
+
 /**
  * Remove pending alarms for an item — deleted, completed, or cleared.
  * `times` is what the item last had stored, the only record of what exists.

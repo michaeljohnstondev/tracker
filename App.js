@@ -78,7 +78,11 @@ function Router() {
       return <HomeScreen onOpen={openTracker} />;
     }
     return tracker.type === 'timer' ? (
-      <TimerDetailScreen tracker={tracker} onBack={goHome} />
+      <TimerDetailScreen
+        tracker={tracker}
+        onBack={goHome}
+        onOpenTracker={openTracker}
+      />
     ) : (
       <ListDetailScreen
         tracker={tracker}

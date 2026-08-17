@@ -14,6 +14,8 @@ import VibeButton from './ui/VibeButton';
 import VibeSegmentedControl from './ui/VibeSegmentedControl';
 import {
   TRACKER_COLORS,
+  TRACKER_CATEGORIES,
+  DEFAULT_CATEGORY,
   makeTimerTracker,
   makeListTracker,
 } from '../lib/trackers';
@@ -42,6 +44,7 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
   const [type, setType] = useState('timer');
   const [color, setColor] = useState(TRACKER_COLORS[0]);
   const [goalHours, setGoalHours] = useState(16);
+  const [category, setCategory] = useState(DEFAULT_CATEGORY);
   const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
@@ -49,6 +52,7 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
     setType('timer');
     setColor(TRACKER_COLORS[0]);
     setGoalHours(16);
+    setCategory(DEFAULT_CATEGORY);
   };
 
   const handleClose = () => {
@@ -61,8 +65,8 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
     if (!trimmed) return;
     const tracker =
       type === 'timer'
-        ? makeTimerTracker({ name: trimmed, color, goalHours })
-        : makeListTracker({ name: trimmed, color });
+        ? makeTimerTracker({ name: trimmed, color, goalHours, category })
+        : makeListTracker({ name: trimmed, color, category });
     onCreate(tracker);
     reset();
   };
@@ -125,6 +129,20 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
                 </View>
               </>
             )}
+
+            <Text style={styles.label}>Category</Text>
+            <View style={styles.chips}>
+              {TRACKER_CATEGORIES.map((c) => (
+                <VibeButton
+                  key={c}
+                  label={c}
+                  variant="toggle"
+                  color={c === category ? 'green' : 'gray'}
+                  onPress={() => setCategory(c)}
+                  style={styles.categoryChip}
+                />
+              ))}
+            </View>
 
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
@@ -203,6 +221,10 @@ const styles = StyleSheet.create({
   },
   goalChip: {
     minWidth: 56,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  categoryChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
   },

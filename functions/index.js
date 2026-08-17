@@ -1,4 +1,7 @@
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const {
+  onDocumentCreated,
+  onDocumentUpdated,
+} = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
@@ -149,6 +152,39 @@ exports.onListShared = onDocumentCreated(
       title: 'Tracker',
       body: `${name} shared ${listName} with you`,
       data: { type: 'list_shared', listId: share.listId },
+    });
+  }
+);
+
+// "Michael got the milk" — the message that stops two people buying the same
+// thing, which is most of the point of a shared shopping list.
+//
+// An update trigger sees every write to an item: notes, text edits, and every
+// autosave. So this fires only on the specific transition from not-done to
+// done. Un-ticking is silent, as is deleting, which has no trigger at all.
+exports.onItemCompleted = onDocumentUpdated(
+  { region: REGION, document: 'lists/{listId}/items/{itemId}' },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!before || !after) return;
+    if (before.done || !after.done) return;
+
+    const { listId } = event.params;
+    // Whoever ticked it off doesn't need telling they did.
+    const actorUid = after.doneBy || null;
+
+    const [listSnap, recipients, name] = await Promise.all([
+      db.collection('lists').doc(listId).get(),
+      otherMemberUids(listId, actorUid),
+      actorName(actorUid),
+    ]);
+    if (!recipients.length || !listSnap.exists) return;
+
+    await pushToUsers(recipients, {
+      title: listSnap.data().name || 'a list',
+      body: `${name} got ${after.text}`,
+      data: { type: 'item_completed', listId, itemId: event.params.itemId },
     });
   }
 );

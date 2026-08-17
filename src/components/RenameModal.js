@@ -4,22 +4,33 @@ import theme from '../theme/themes';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import { useKeyboardHeight } from '../lib/useKeyboardHeight';
+import { TRACKER_CATEGORIES, DEFAULT_CATEGORY } from '../lib/trackers';
 
-// Rename sheet, shared by both detail screens.
-export default function RenameModal({ visible, initialName, onClose, onSubmit }) {
+// Edit sheet for a tracker's name and category, shared by both detail screens.
+export default function RenameModal({
+  visible,
+  initialName,
+  initialCategory,
+  onClose,
+  onSubmit,
+}) {
   const [name, setName] = useState(initialName ?? '');
+  const [category, setCategory] = useState(initialCategory ?? DEFAULT_CATEGORY);
   const keyboardHeight = useKeyboardHeight();
 
   // Re-seed on open rather than on every prop change, so a rename landing from
   // someone else's phone mid-edit doesn't yank the text out from under you.
   useEffect(() => {
-    if (visible) setName(initialName ?? '');
-  }, [visible, initialName]);
+    if (visible) {
+      setName(initialName ?? '');
+      setCategory(initialCategory ?? DEFAULT_CATEGORY);
+    }
+  }, [visible, initialName, initialCategory]);
 
   const save = useCallback(() => {
-    onSubmit(name);
+    onSubmit(name, category);
     onClose();
-  }, [name, onSubmit, onClose]);
+  }, [name, category, onSubmit, onClose]);
 
   const canSave = name.trim().length > 0;
 
@@ -35,7 +46,7 @@ export default function RenameModal({ visible, initialName, onClose, onSubmit })
           style={[styles.sheet, { paddingBottom: 34 + keyboardHeight }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={styles.title}>Rename</Text>
+          <Text style={styles.title}>Edit tracker</Text>
 
           <VibeInput
             value={name}
@@ -48,6 +59,20 @@ export default function RenameModal({ visible, initialName, onClose, onSubmit })
             onSubmitEditing={canSave ? save : undefined}
             returnKeyType="done"
           />
+
+          <Text style={styles.label}>Category</Text>
+          <View style={styles.chips}>
+            {TRACKER_CATEGORIES.map((c) => (
+              <VibeButton
+                key={c}
+                label={c}
+                variant="toggle"
+                color={c === category ? 'green' : 'gray'}
+                onPress={() => setCategory(c)}
+                style={styles.chip}
+              />
+            ))}
+          </View>
 
           <View style={styles.actions}>
             <VibeButton
@@ -87,6 +112,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: theme.fonts.main,
     marginBottom: 14,
+  },
+  label: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginTop: 18,
+    marginBottom: 8,
+    fontFamily: theme.fonts.main,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
   },
   actions: {
     marginTop: 22,

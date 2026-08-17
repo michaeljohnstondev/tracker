@@ -8,7 +8,11 @@ import VibeCalendar from '../components/ui/VibeCalendar';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import RenameModal from '../components/RenameModal';
+import ShareListModal from '../components/ShareListModal';
+import GoalModal from '../components/GoalModal';
 import { useTrackers } from '../store/TrackerContext';
+import { useAuth } from '../store/AuthContext';
+import { syncGoalReminder } from '../services/reminders';
 import { useNow } from '../lib/useNow';
 import {
   fmtElapsed,
@@ -19,13 +23,27 @@ import {
 
 const GOAL_PRESETS = [13, 16, 18, 20, 24];
 
-export default function TimerDetailScreen({ tracker, onBack }) {
-  const { updateTracker, renameTracker, deleteTracker } = useTrackers();
+// Goals can be fractional now, so 1.5 has to read as "1h 30m" rather than
+// "1.5h".
+function fmtGoal(hours) {
+  if (!hours) return '—';
+  const whole = Math.floor(hours);
+  const mins = Math.round((hours - whole) * 60);
+  if (!mins) return `${whole}h`;
+  return whole ? `${whole}h ${mins}m` : `${mins}m`;
+}
+
+export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
+  const { updateTrackerFields, renameTracker, finalizeShare, deleteTracker } =
+    useTrackers();
+  const { uid } = useAuth();
+  const [sharing, setSharing] = useState(false);
   // Setting a start time is two steps — date, then time — so that a fast
   // running longer than a day can still be corrected. null means closed.
   const [pickerStage, setPickerStage] = useState(null);
   const [pendingDate, setPendingDate] = useState(null);
   const [renaming, setRenaming] = useState(false);
+  const [goalOpen, setGoalOpen] = useState(false);
 
   const active = tracker.startMs != null;
   const now = useNow(active);
@@ -40,18 +58,31 @@ export default function TimerDetailScreen({ tracker, onBack }) {
     [tracker.startMs]
   );
 
-  const startNow = useCallback(() => {
-    updateTracker(tracker.id, { startMs: Date.now() });
-  }, [tracker.id, updateTracker]);
-
-  const stopReset = useCallback(() => {
-    updateTracker(tracker.id, { startMs: null });
-  }, [tracker.id, updateTracker]);
-
-  const pickGoal = useCallback(
-    (h) => updateTracker(tracker.id, { goalHours: h }),
-    [tracker.id, updateTracker]
+  // Every change to when the timer started or what it's aiming at moves the
+  // finish line, so the alarm is rewritten alongside it rather than in an
+  // effect — an effect would fire again on every incoming snapshot of a
+  // shared timer and rewrite the same document endlessly.
+  const applyTimer = useCallback(
+    (patch) => {
+      updateTrackerFields(tracker, patch);
+      syncGoalReminder({
+        tracker,
+        uid,
+        startMs: 'startMs' in patch ? patch.startMs : tracker.startMs,
+        goalHours: 'goalHours' in patch ? patch.goalHours : tracker.goalHours,
+      });
+    },
+    [tracker, uid, updateTrackerFields]
   );
+
+  const startNow = useCallback(
+    () => applyTimer({ startMs: Date.now() }),
+    [applyTimer]
+  );
+
+  const stopReset = useCallback(() => applyTimer({ startMs: null }), [applyTimer]);
+
+  const pickGoal = useCallback((h) => applyTimer({ goalHours: h }), [applyTimer]);
 
   const openStartPicker = useCallback(() => {
     setPendingDate(
@@ -90,9 +121,9 @@ export default function TimerDetailScreen({ tracker, onBack }) {
         );
         return;
       }
-      updateTracker(tracker.id, { startMs: ms });
+      applyTimer({ startMs: ms });
     },
-    [pendingDate, tracker.id, updateTracker]
+    [pendingDate, applyTimer]
   );
 
   const confirmDelete = useCallback(() => {
@@ -115,8 +146,13 @@ export default function TimerDetailScreen({ tracker, onBack }) {
         color={color}
         onBack={onBack}
         onRename={() => setRenaming(true)}
+        onShare={() => setSharing(true)}
         onDelete={confirmDelete}
       />
+
+      {tracker.shared && (
+        <Text style={styles.sharedNote}>Shared · changes sync live</Text>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -139,7 +175,13 @@ export default function TimerDetailScreen({ tracker, onBack }) {
                   />
                 </View>
                 <View style={styles.goalRow}>
-                  <Text style={styles.goalLabel}>Goal {goalHours}h</Text>
+                  {/* Editable while running: you often only realise the goal
+                      is wrong once the clock is already going. */}
+                  <Pressable onPress={() => setGoalOpen(true)} hitSlop={8}>
+                    <Text style={[styles.goalLabel, styles.goalEditable]}>
+                      Goal {fmtGoal(goalHours)} ✎
+                    </Text>
+                  </Pressable>
                   <Text
                     style={[
                       styles.goalRemaining,
@@ -150,6 +192,11 @@ export default function TimerDetailScreen({ tracker, onBack }) {
                     {fmtRemaining(elapsedMs, goalMs)}
                   </Text>
                 </View>
+                {/* The actual finish time, so you never have to add hours to
+                    a start time in your head. */}
+                <Text style={styles.endsAt}>
+                  Ends {fmtStart(tracker.startMs + goalMs)}
+                </Text>
               </>
             )}
 
@@ -182,6 +229,21 @@ export default function TimerDetailScreen({ tracker, onBack }) {
                   style={styles.goalChip}
                 />
               ))}
+              {/* Presets can't cover every use — a feeding window, a
+                  20-minute meditation — so anything is typeable. */}
+              <VibeButton
+                label={
+                  goalHours && !GOAL_PRESETS.includes(goalHours)
+                    ? fmtGoal(goalHours)
+                    : 'Custom'
+                }
+                variant="toggle"
+                color={
+                  goalHours && !GOAL_PRESETS.includes(goalHours) ? 'green' : 'gray'
+                }
+                onPress={() => setGoalOpen(true)}
+                style={styles.goalChip}
+              />
             </View>
 
             <View style={styles.actions}>
@@ -216,11 +278,32 @@ export default function TimerDetailScreen({ tracker, onBack }) {
         confirmText="Set"
       />
 
+      <ShareListModal
+        visible={sharing}
+        tracker={tracker}
+        onClose={(result) => {
+          setSharing(false);
+          if (!result?.publishedId) return;
+          // Move to the shared copy before the local one is removed, so
+          // nothing is left pointing at a tracker that no longer exists.
+          onOpenTracker?.(`remote:${result.publishedId}`);
+          finalizeShare(result.localId);
+        }}
+      />
+
+      <GoalModal
+        visible={goalOpen}
+        initialHours={tracker.goalHours}
+        onClose={() => setGoalOpen(false)}
+        onSubmit={pickGoal}
+      />
+
       <RenameModal
         visible={renaming}
         initialName={tracker.name}
+        initialCategory={tracker.category}
         onClose={() => setRenaming(false)}
-        onSubmit={(name) => renameTracker(tracker, name)}
+        onSubmit={(name, category) => renameTracker(tracker, name, category)}
       />
     </SafeAreaView>
   );
@@ -228,6 +311,16 @@ export default function TimerDetailScreen({ tracker, onBack }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.background },
+  sharedNote: {
+    color: theme.colors.vibeCyan,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 4,
+    fontFamily: theme.fonts.main,
+  },
   content: {
     flexGrow: 1,
     alignItems: 'center',
@@ -286,6 +379,14 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.main,
   },
   goalReached: { color: theme.colors.vibeGreen },
+  goalEditable: { color: theme.colors.vibeCyan },
+  endsAt: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    fontFamily: theme.fonts.main,
+  },
   editLink: {
     color: theme.colors.textSecondary,
     fontSize: 14,

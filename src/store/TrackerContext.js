@@ -12,6 +12,9 @@ import {
   saveTrackers,
   loadTrackerOrder,
   saveTrackerOrder,
+  loadTrackerCategories,
+  saveTrackerCategories,
+  categoryOf,
   newId,
 } from '../lib/trackers';
 import { useAuth } from './AuthContext';
@@ -38,17 +41,29 @@ export function TrackerProvider({ children }) {
   // it (a brand-new tracker, a list someone just shared with you) falls to the
   // bottom rather than jumping into the middle unannounced.
   const [order, setOrder] = useState([]);
+  // trackerId -> category. Personal, device-local, covers shared lists too.
+  const [categories, setCategories] = useState({});
 
   useEffect(() => {
     (async () => {
-      const [initial, savedOrder] = await Promise.all([
+      const [initial, savedOrder, savedCategories] = await Promise.all([
         loadTrackers(),
         loadTrackerOrder(),
+        loadTrackerCategories(),
       ]);
       setLocalTrackers(initial);
       setOrder(savedOrder);
+      setCategories(savedCategories);
       setLoaded(true);
     })();
+  }, []);
+
+  const setTrackerCategory = useCallback((trackerId, category) => {
+    setCategories((prev) => {
+      const next = { ...prev, [trackerId]: category };
+      saveTrackerCategories(next);
+      return next;
+    });
   }, []);
 
   // Local mutations: compute next array, set state, persist. Persistence is
@@ -151,12 +166,16 @@ export function TrackerProvider({ children }) {
           id: remoteKey(listId),
           remoteId: listId,
           shared: true,
-          type: 'list',
+          // Timers share this collection too; older docs predate the field
+          // and are all lists.
+          type: entry.meta.type === 'timer' ? 'timer' : 'list',
           name: entry.meta.name,
           color: entry.meta.color,
           ownerUid: entry.meta.ownerUid,
           isOwner: entry.meta.ownerUid === uid,
           createdAt: entry.meta.createdAt ?? 0,
+          startMs: entry.meta.startMs ?? null,
+          goalHours: entry.meta.goalHours ?? null,
           items: entry.items ?? [],
         })),
     [sharedById, uid]
@@ -164,14 +183,21 @@ export function TrackerProvider({ children }) {
 
   const trackers = useMemo(() => {
     const rank = new Map(order.map((id, index) => [id, index]));
-    return [...localTrackers, ...sharedTrackers].sort((a, b) => {
-      const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
-      const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
-      // Unranked trackers keep their old creation ordering among themselves.
-      if (ra !== rb) return ra - rb;
-      return (a.createdAt ?? 0) - (b.createdAt ?? 0);
-    });
-  }, [localTrackers, sharedTrackers, order]);
+    return [...localTrackers, ...sharedTrackers]
+      .map((t) => ({
+        ...t,
+        // The local override wins over whatever the record carries, so a
+        // shared list can be filed without touching the shared document.
+        category: categories[t.id] ?? categoryOf(t),
+      }))
+      .sort((a, b) => {
+        const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
+        const rb = rank.has(b.id) ? rank.get(b.id) : Infinity;
+        // Unranked trackers keep their creation ordering among themselves.
+        if (ra !== rb) return ra - rb;
+        return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+      });
+  }, [localTrackers, sharedTrackers, order, categories]);
 
   const allRef = useRef([]);
   allRef.current = trackers;
@@ -208,6 +234,18 @@ export function TrackerProvider({ children }) {
     [uid, updateTracker]
   );
 
+  // Field updates on the tracker itself — a timer's start time and goal.
+  // Dispatches the same way item operations do, so the timer screen doesn't
+  // need to know whether it's looking at a shared tracker.
+  const updateTrackerFields = useCallback(
+    (tracker, patch) => {
+      if (tracker.shared) return remote.updateList(tracker.remoteId, patch);
+      updateTracker(tracker.id, patch);
+      return Promise.resolve();
+    },
+    [updateTracker]
+  );
+
   const updateItemIn = useCallback(
     (tracker, itemId, patch) => {
       if (tracker.shared) return remote.updateItem(tracker.remoteId, itemId, patch);
@@ -238,19 +276,36 @@ export function TrackerProvider({ children }) {
       }));
       return Promise.resolve();
     },
-    [updateTracker]
+    [updateTracker, setTrackerCategory]
   );
 
-  // The saved order is rebuilt from what's currently on screen, so the first
-  // drag also pins down every other tracker's position instead of leaving
-  // them implicitly ranked.
-  const reorderTrackers = useCallback((from, to) => {
+  /**
+   * Reorder within whatever subset the home screen is currently showing.
+   *
+   * The indices from a filtered list are positions in that filter, not in the
+   * full order, so they're mapped back: the subset's slots in the master order
+   * stay put and the ids are rewritten into them. Reordering Shopping can't
+   * disturb where Health sits.
+   */
+  const reorderTrackers = useCallback((from, to, subsetIds) => {
+    if (from === to) return;
+
     const ids = allRef.current.map((t) => t.id);
-    if (from === to || from < 0 || to < 0 || to >= ids.length) return;
+    const subset = subsetIds?.length ? subsetIds : ids;
+    if (from < 0 || to < 0 || to >= subset.length) return;
+
+    const reordered = [...subset];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    const slots = ids
+      .map((id, index) => (subset.includes(id) ? index : -1))
+      .filter((index) => index !== -1);
 
     const next = [...ids];
-    const [moved] = next.splice(from, 1);
-    next.splice(to, 0, moved);
+    slots.forEach((slot, i) => {
+      next[slot] = reordered[i];
+    });
 
     setOrder(next);
     saveTrackerOrder(next);
@@ -274,13 +329,20 @@ export function TrackerProvider({ children }) {
   );
 
   const renameTracker = useCallback(
-    (tracker, name) => {
-      const trimmed = name.trim();
-      // Silently ignoring an empty name is friendlier than an error dialog:
-      // the modal simply closes and nothing changes.
-      if (!trimmed || trimmed === tracker.name) return Promise.resolve();
-      if (tracker.shared) return remote.renameList(tracker.remoteId, trimmed);
-      updateTracker(tracker.id, { name: trimmed });
+    (tracker, name, category) => {
+      const trimmed = (name ?? '').trim();
+      const nextName = trimmed || tracker.name;
+      const nameChanged = nextName !== tracker.name;
+      const categoryChanged = category && category !== tracker.category;
+      if (!nameChanged && !categoryChanged) return Promise.resolve();
+
+      // Category is personal shelving, so it stays local even for a shared
+      // list — you and your wife can file the same list differently.
+      if (categoryChanged) setTrackerCategory(tracker.id, category);
+
+      if (!nameChanged) return Promise.resolve();
+      if (tracker.shared) return remote.renameList(tracker.remoteId, nextName);
+      updateTracker(tracker.id, { name: nextName });
       return Promise.resolve();
     },
     [updateTracker]
@@ -344,6 +406,7 @@ export function TrackerProvider({ children }) {
     loaded,
     addTracker,
     updateTracker,
+    updateTrackerFields,
     deleteTracker,
     getTracker,
     addItemTo,

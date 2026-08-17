@@ -71,7 +71,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
       setCode(generated);
       await Share.share({
         message:
-          `Join my "${tracker.name}" list on Tracker.\n\n` +
+          `Join my "${tracker.name}" on Tracker.\n\n` +
           `Invite code: ${generated}\n\n` +
           `Open Tracker, tap "Join with code" and enter it.`,
       });
@@ -100,7 +100,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
     >
       <Pressable style={styles.overlay} onPress={handleClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Share “{tracker?.name}”</Text>
+          <Text style={styles.title}>Share “{tracker?.name}”</Text>
 
           {!user && (
             <>
@@ -122,12 +122,12 @@ export default function ShareListModal({ visible, tracker, onClose }) {
           {user && !isShared && (
             <>
               <Text style={styles.body}>
-                This list lives only on this phone. Sharing uploads it so
+                This tracker lives only on this phone. Sharing uploads it so
                 someone else can see and edit it in real time.
               </Text>
               <View style={styles.actions}>
                 <VibeButton
-                  label="Share this list"
+                  label="Share this tracker"
                   variant="green"
                   onPress={handlePublish}
                   disabled={spinner}
@@ -141,7 +141,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
               <Text style={styles.body}>
                 {code
                   ? 'Give them this code — it works once they enter it in Tracker.'
-                  : 'This list is shared. Create a code to invite someone.'}
+                  : 'This tracker is shared. Create a code to invite someone.'}
               </Text>
 
               {code && <Text style={styles.code}>{code}</Text>}

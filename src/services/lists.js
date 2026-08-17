@@ -59,10 +59,18 @@ export function shareList(tracker, uid) {
 
   const writes = [
     setDoc(listRef, {
+      // Timers share the same collection and machinery as lists. The
+      // collection name is now a slight misnomer, but renaming a live
+      // collection costs a migration to fix a word.
+      type: tracker.type === 'timer' ? 'timer' : 'list',
       name: tracker.name,
       color: tracker.color,
       ownerUid: uid,
       createdAt: Date.now(),
+      // Carried so a shared fast shows the same clock on both phones — the
+      // elapsed time is derived from this one absolute timestamp.
+      startMs: tracker.startMs ?? null,
+      goalHours: tracker.goalHours ?? null,
     }),
     setDoc(doc(db, 'memberships', membershipId(listId, uid)), {
       listId,
@@ -132,10 +140,15 @@ export function subscribeToItems(listId, onChange, onError) {
   );
 }
 
-// Any member can rename a shared list — it's a shared object, and needing to
-// chase the owner to fix a typo would be worse than the rare surprise.
+// Any member can edit a shared tracker — it's a shared object, and needing to
+// chase the owner to fix a typo, or to stop a fast, would be worse than the
+// rare surprise of it changing under you.
+export function updateList(listId, patch) {
+  return updateDoc(doc(db, 'lists', listId), patch);
+}
+
 export function renameList(listId, name) {
-  return updateDoc(doc(db, 'lists', listId), { name });
+  return updateList(listId, { name });
 }
 
 export function addItem(listId, text, uid) {
