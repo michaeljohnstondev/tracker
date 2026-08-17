@@ -14,19 +14,23 @@ import VibeButton from './ui/VibeButton';
 import VibeSegmentedControl from './ui/VibeSegmentedControl';
 import {
   TRACKER_COLORS,
-  TRACKER_CATEGORIES,
-  DEFAULT_CATEGORY,
   makeTimerTracker,
   makeListTracker,
+  makeCategoryTracker,
 } from '../lib/trackers';
 import { resolveColor } from '../lib/format';
 
 const TYPE_OPTIONS = [
   { value: 'timer', label: 'Timer', icon: '⏱' },
   { value: 'list', label: 'List', icon: '☰' },
+  { value: 'category', label: 'Category', icon: '🗂' },
 ];
 
-const GOAL_PRESETS = [13, 16, 18, 20, 24];
+// Generic spread rather than fasting lengths — the goal is fully editable on
+// the timer screen anyway, so this only has to be a reasonable starting point.
+const GOAL_PRESETS = [0.25, 0.5, 1, 4, 8, 16];
+
+const fmtGoal = (h) => (h < 1 ? `${Math.round(h * 60)}m` : `${h}h`);
 
 // The two types get named for completely different reasons — a timer is a
 // thing you're measuring, a list is a thing you're collecting — so a single
@@ -43,16 +47,14 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
   const [name, setName] = useState('');
   const [type, setType] = useState('timer');
   const [color, setColor] = useState(TRACKER_COLORS[0]);
-  const [goalHours, setGoalHours] = useState(16);
-  const [category, setCategory] = useState(DEFAULT_CATEGORY);
+  const [goalHours, setGoalHours] = useState(1);
   const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
     setName('');
     setType('timer');
     setColor(TRACKER_COLORS[0]);
-    setGoalHours(16);
-    setCategory(DEFAULT_CATEGORY);
+    setGoalHours(1);
   };
 
   const handleClose = () => {
@@ -63,10 +65,13 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
   const handleCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const tracker =
+    const make =
       type === 'timer'
-        ? makeTimerTracker({ name: trimmed, color, goalHours, category })
-        : makeListTracker({ name: trimmed, color, category });
+        ? () => makeTimerTracker({ name: trimmed, color, goalHours })
+        : type === 'category'
+          ? () => makeCategoryTracker({ name: trimmed, color })
+          : () => makeListTracker({ name: trimmed, color });
+    const tracker = make();
     onCreate(tracker);
     reset();
   };
@@ -119,7 +124,7 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
                   {GOAL_PRESETS.map((h) => (
                     <VibeButton
                       key={h}
-                      label={`${h}h`}
+                      label={fmtGoal(h)}
                       variant="toggle"
                       color={h === goalHours ? 'green' : 'gray'}
                       onPress={() => setGoalHours(h)}
@@ -129,20 +134,6 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
                 </View>
               </>
             )}
-
-            <Text style={styles.label}>Category</Text>
-            <View style={styles.chips}>
-              {TRACKER_CATEGORIES.map((c) => (
-                <VibeButton
-                  key={c}
-                  label={c}
-                  variant="toggle"
-                  color={c === category ? 'green' : 'gray'}
-                  onPress={() => setCategory(c)}
-                  style={styles.categoryChip}
-                />
-              ))}
-            </View>
 
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
@@ -221,10 +212,6 @@ const styles = StyleSheet.create({
   },
   goalChip: {
     minWidth: 56,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  categoryChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
   },

@@ -21,7 +21,10 @@ import {
   resolveColor,
 } from '../lib/format';
 
-const GOAL_PRESETS = [13, 16, 18, 20, 24];
+// A spread across the range a timer might plausibly cover — meditation at a
+// quarter hour, a gym session, a feeding window, a fast, a full day — rather
+// than the fasting-only ladder this started with.
+const GOAL_PRESETS = [0.25, 0.5, 1, 4, 8, 16];
 
 // Goals can be fractional now, so 1.5 has to read as "1h 30m" rather than
 // "1.5h".
@@ -222,7 +225,7 @@ export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
               {GOAL_PRESETS.map((h) => (
                 <VibeButton
                   key={h}
-                  label={`${h}h`}
+                  label={fmtGoal(h)}
                   variant="toggle"
                   color={h === goalHours ? 'green' : 'gray'}
                   onPress={() => pickGoal(h)}
@@ -300,10 +303,11 @@ export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
 
       <RenameModal
         visible={renaming}
+        tracker={tracker}
         initialName={tracker.name}
-        initialCategory={tracker.category}
+        initialParentId={tracker.parentId}
         onClose={() => setRenaming(false)}
-        onSubmit={(name, category) => renameTracker(tracker, name, category)}
+        onSubmit={(name, parentId) => renameTracker(tracker, name, parentId)}
       />
     </SafeAreaView>
   );

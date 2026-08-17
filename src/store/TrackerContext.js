@@ -12,9 +12,8 @@ import {
   saveTrackers,
   loadTrackerOrder,
   saveTrackerOrder,
-  loadTrackerCategories,
-  saveTrackerCategories,
-  categoryOf,
+  loadTrackerParents,
+  saveTrackerParents,
   newId,
 } from '../lib/trackers';
 import { useAuth } from './AuthContext';
@@ -41,27 +40,31 @@ export function TrackerProvider({ children }) {
   // it (a brand-new tracker, a list someone just shared with you) falls to the
   // bottom rather than jumping into the middle unannounced.
   const [order, setOrder] = useState([]);
-  // trackerId -> category. Personal, device-local, covers shared lists too.
-  const [categories, setCategories] = useState({});
+  // trackerId -> the category tracker it lives in. Personal and device-local,
+  // so it covers shared trackers too and never fights with anyone else's
+  // filing.
+  const [parents, setParents] = useState({});
 
   useEffect(() => {
     (async () => {
-      const [initial, savedOrder, savedCategories] = await Promise.all([
+      const [initial, savedOrder, savedParents] = await Promise.all([
         loadTrackers(),
         loadTrackerOrder(),
-        loadTrackerCategories(),
+        loadTrackerParents(),
       ]);
       setLocalTrackers(initial);
       setOrder(savedOrder);
-      setCategories(savedCategories);
+      setParents(savedParents);
       setLoaded(true);
     })();
   }, []);
 
-  const setTrackerCategory = useCallback((trackerId, category) => {
-    setCategories((prev) => {
-      const next = { ...prev, [trackerId]: category };
-      saveTrackerCategories(next);
+  const setTrackerParent = useCallback((trackerId, parentId) => {
+    setParents((prev) => {
+      const next = { ...prev };
+      if (parentId) next[trackerId] = parentId;
+      else delete next[trackerId];
+      saveTrackerParents(next);
       return next;
     });
   }, []);
@@ -186,9 +189,8 @@ export function TrackerProvider({ children }) {
     return [...localTrackers, ...sharedTrackers]
       .map((t) => ({
         ...t,
-        // The local override wins over whatever the record carries, so a
-        // shared list can be filed without touching the shared document.
-        category: categories[t.id] ?? categoryOf(t),
+        // null means it sits at the top level.
+        parentId: parents[t.id] ?? null,
       }))
       .sort((a, b) => {
         const ra = rank.has(a.id) ? rank.get(a.id) : Infinity;
@@ -197,7 +199,7 @@ export function TrackerProvider({ children }) {
         if (ra !== rb) return ra - rb;
         return (a.createdAt ?? 0) - (b.createdAt ?? 0);
       });
-  }, [localTrackers, sharedTrackers, order, categories]);
+  }, [localTrackers, sharedTrackers, order, parents]);
 
   const allRef = useRef([]);
   allRef.current = trackers;
@@ -276,7 +278,7 @@ export function TrackerProvider({ children }) {
       }));
       return Promise.resolve();
     },
-    [updateTracker, setTrackerCategory]
+    [updateTracker]
   );
 
   /**
@@ -329,23 +331,24 @@ export function TrackerProvider({ children }) {
   );
 
   const renameTracker = useCallback(
-    (tracker, name, category) => {
+    (tracker, name, parentId) => {
       const trimmed = (name ?? '').trim();
       const nextName = trimmed || tracker.name;
       const nameChanged = nextName !== tracker.name;
-      const categoryChanged = category && category !== tracker.category;
-      if (!nameChanged && !categoryChanged) return Promise.resolve();
+      const nextParent = parentId ?? null;
+      const parentChanged = nextParent !== (tracker.parentId ?? null);
+      if (!nameChanged && !parentChanged) return Promise.resolve();
 
-      // Category is personal shelving, so it stays local even for a shared
-      // list — you and your wife can file the same list differently.
-      if (categoryChanged) setTrackerCategory(tracker.id, category);
+      // Filing is personal, so it stays local even for a shared tracker — you
+      // and your wife can keep the same list in different categories.
+      if (parentChanged) setTrackerParent(tracker.id, nextParent);
 
       if (!nameChanged) return Promise.resolve();
       if (tracker.shared) return remote.renameList(tracker.remoteId, nextName);
       updateTracker(tracker.id, { name: nextName });
       return Promise.resolve();
     },
-    [updateTracker]
+    [updateTracker, setTrackerParent]
   );
 
   // ---- Sharing ------------------------------------------------------------
@@ -389,6 +392,26 @@ export function TrackerProvider({ children }) {
       const tracker =
         typeof idOrTracker === 'string' ? getTracker(idOrTracker) : idOrTracker;
       if (!tracker) return Promise.resolve();
+
+      // Deleting a category must not take its contents with it. Its children
+      // move up to wherever it lived, so a nested branch stays where it makes
+      // sense rather than being dumped at the top level — and nothing is
+      // silently destroyed because its folder went.
+      if (tracker.type === 'category') {
+        setParents((prev) => {
+          const next = { ...prev };
+          const grandparent = prev[tracker.id] ?? null;
+          Object.entries(next).forEach(([childId, parentId]) => {
+            if (parentId !== tracker.id) return;
+            if (grandparent) next[childId] = grandparent;
+            else delete next[childId];
+          });
+          delete next[tracker.id];
+          saveTrackerParents(next);
+          return next;
+        });
+      }
+
       if (!tracker.shared) {
         deleteLocalTracker(tracker.id);
         return Promise.resolve();
@@ -415,6 +438,7 @@ export function TrackerProvider({ children }) {
     removeItemFrom,
     clearDoneIn,
     renameTracker,
+    setTrackerParent,
     reorderTrackers,
     reorderItemsIn,
     shareTracker,

@@ -3,14 +3,25 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 import { fmtElapsedShort, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
-import { useReorderableDrag } from 'react-native-reorderable-list';
+import {
+  useReorderableDrag,
+  useReorderableDragEnd,
+} from 'react-native-reorderable-list';
 
 // One row on the home screen. Shows a live summary depending on type:
 //  - timer:  running elapsed + goal, or "Not started"
 //  - list:   "3 / 7 done"
-export default function TrackerCard({ tracker, onPress }) {
+export default function TrackerCard({ tracker, index, onPress, onHold }) {
   // Provided by the enclosing ReorderableList; starts a drag when called.
   const drag = useReorderableDrag();
+
+  // A long press that ends where it began wasn't a reorder — the user held the
+  // card and let go, which is taken as "I want to do something with this one".
+  // The index guard matters because this fires for every cell, not just the
+  // one that moved.
+  useReorderableDragEnd((from, to) => {
+    if (from === to && from === index) onHold?.();
+  });
   const color = resolveColor(tracker.color);
   const active = tracker.type === 'timer' && tracker.startMs != null;
   const now = useNow(active);
@@ -30,6 +41,10 @@ export default function TrackerCard({ tracker, onPress }) {
     } else {
       summary = 'Not started';
     }
+  } else if (tracker.type === 'category') {
+    // Counting children needs the whole tracker list, which this card doesn't
+    // have — and a count is not what you're scanning for on a folder anyway.
+    summary = 'Category';
   } else {
     // A shared list's items arrive on a separate subscription to its
     // metadata, so the card can render for a beat before items exist.
@@ -40,7 +55,8 @@ export default function TrackerCard({ tracker, onPress }) {
     if (total > 0 && done === total) accent = theme.colors.vibeGreen;
   }
 
-  const icon = tracker.type === 'timer' ? '⏱' : '☰';
+  const icon =
+    tracker.type === 'timer' ? '⏱' : tracker.type === 'category' ? '🗂' : '☰';
 
   return (
     <Pressable

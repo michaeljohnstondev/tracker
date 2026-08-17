@@ -1,36 +1,44 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import { useKeyboardHeight } from '../lib/useKeyboardHeight';
-import { TRACKER_CATEGORIES, DEFAULT_CATEGORY } from '../lib/trackers';
+import { useTrackers } from '../store/TrackerContext';
+import { filingTargets } from '../lib/trackers';
 
-// Edit sheet for a tracker's name and category, shared by both detail screens.
+// Edit sheet for a tracker's name and which category it sits in.
 export default function RenameModal({
   visible,
+  tracker,
   initialName,
-  initialCategory,
+  initialParentId,
   onClose,
   onSubmit,
 }) {
+  const { trackers } = useTrackers();
   const [name, setName] = useState(initialName ?? '');
-  const [category, setCategory] = useState(initialCategory ?? DEFAULT_CATEGORY);
+  const [parentId, setParentId] = useState(initialParentId ?? null);
   const keyboardHeight = useKeyboardHeight();
+
+  const categories = useMemo(
+    () => (tracker ? filingTargets(trackers, tracker) : []),
+    [trackers, tracker]
+  );
 
   // Re-seed on open rather than on every prop change, so a rename landing from
   // someone else's phone mid-edit doesn't yank the text out from under you.
   useEffect(() => {
     if (visible) {
       setName(initialName ?? '');
-      setCategory(initialCategory ?? DEFAULT_CATEGORY);
+      setParentId(initialParentId ?? null);
     }
-  }, [visible, initialName, initialCategory]);
+  }, [visible, initialName, initialParentId]);
 
   const save = useCallback(() => {
-    onSubmit(name, category);
+    onSubmit(name, parentId);
     onClose();
-  }, [name, category, onSubmit, onClose]);
+  }, [name, parentId, onSubmit, onClose]);
 
   const canSave = name.trim().length > 0;
 
@@ -60,19 +68,31 @@ export default function RenameModal({
             returnKeyType="done"
           />
 
-          <Text style={styles.label}>Category</Text>
-          <View style={styles.chips}>
-            {TRACKER_CATEGORIES.map((c) => (
-              <VibeButton
-                key={c}
-                label={c}
-                variant="toggle"
-                color={c === category ? 'green' : 'gray'}
-                onPress={() => setCategory(c)}
-                style={styles.chip}
-              />
-            ))}
-          </View>
+          {/* Hidden until there's somewhere to file it. */}
+          {categories.length > 0 && (
+            <>
+              <Text style={styles.label}>Category</Text>
+              <View style={styles.chips}>
+                <VibeButton
+                  label="None"
+                  variant="toggle"
+                  color={parentId ? 'gray' : 'green'}
+                  onPress={() => setParentId(null)}
+                  style={styles.chip}
+                />
+                {categories.map((c) => (
+                  <VibeButton
+                    key={c.id}
+                    label={c.name}
+                    variant="toggle"
+                    color={c.id === parentId ? 'green' : 'gray'}
+                    onPress={() => setParentId(c.id)}
+                    style={styles.chip}
+                  />
+                ))}
+              </View>
+            </>
+          )}
 
           <View style={styles.actions}>
             <VibeButton

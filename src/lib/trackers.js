@@ -16,20 +16,6 @@ const ORDER_KEY = 'trackerOrder.v1';
 const LEGACY_START = 'fast.startMs';
 const LEGACY_GOAL = 'fast.goalHours';
 
-// Categories are a flat label rather than real nesting. Folders inside
-// folders would raise questions with no good answer — whether a shared list
-// can live in a private folder, what reordering means across levels — and a
-// household app doesn't need that depth to stop the home screen sprawling.
-export const TRACKER_CATEGORIES = ['Goals', 'To-do', 'Shopping', 'Health', 'Other'];
-
-// Anything created before categories existed reads as this.
-export const DEFAULT_CATEGORY = 'Other';
-
-export const categoryOf = (tracker) =>
-  TRACKER_CATEGORIES.includes(tracker?.category)
-    ? tracker.category
-    : DEFAULT_CATEGORY;
-
 export const TRACKER_COLORS = [
   'vibeBlue',
   'vibeGreen',
@@ -49,13 +35,13 @@ export function newId() {
   ).toString(36)}`;
 }
 
-export function makeTimerTracker({ name, color, goalHours = 16, category = DEFAULT_CATEGORY }) {
+// Defaults to an hour rather than a 16-hour fast: this is a general timer now.
+export function makeTimerTracker({ name, color, goalHours = 1 }) {
   return {
     id: newId(),
     type: 'timer',
     name,
     color,
-    category,
     createdAt: Date.now(),
     startMs: null,
     goalHours,
@@ -63,13 +49,34 @@ export function makeTimerTracker({ name, color, goalHours = 16, category = DEFAU
   };
 }
 
-export function makeListTracker({ name, color, category = DEFAULT_CATEGORY }) {
+export function makeListTracker({ name, color }) {
   return {
     id: newId(),
     type: 'list',
     name,
     color,
-    category,
+    createdAt: Date.now(),
+    startMs: null,
+    goalHours: null,
+    items: [],
+  };
+}
+
+/**
+ * A category is a tracker that holds other trackers — a folder, and it can
+ * hold other categories to any depth.
+ *
+ * Unlimited nesting is safe here precisely because a category is never itself
+ * shared: sharing one shares the lists inside it, and the recipient files
+ * those wherever they like. So the tree is local bookkeeping and never
+ * something security rules have to walk.
+ */
+export function makeCategoryTracker({ name, color }) {
+  return {
+    id: newId(),
+    type: 'category',
+    name,
+    color,
     createdAt: Date.now(),
     startMs: null,
     goalHours: null,
@@ -97,14 +104,45 @@ export async function saveTrackers(trackers) {
   await AsyncStorage.setItem(KEY, JSON.stringify(trackers));
 }
 
-// Category lives on the device, keyed by tracker id, rather than on the list
-// document — the same reasoning as ordering. It's personal shelving: a list
-// you file under Shopping may be Health to whoever you share it with. It also
-// means a shared list, which has no local record, can still be filed.
-const CATEGORY_KEY = 'trackerCategories.v1';
+// Which category a tracker sits in, as trackerId -> categoryTrackerId. Stored
+// on the device rather than on the shared document, the same as ordering: it's
+// personal shelving. A list you keep under Shopping may live somewhere else
+// entirely for whoever you share it with, and neither overwrites the other. It
+// also means a shared tracker, which has no local record, can still be filed.
+//
+// Superseded the earlier flat-label version, whose values were category names
+// rather than ids; those are ignored rather than migrated, since there were
+// only ever a handful.
+const PARENT_KEY = 'trackerParents.v1';
 
-export async function loadTrackerCategories() {
-  const raw = await AsyncStorage.getItem(CATEGORY_KEY);
+/**
+ * Categories a tracker may legally be filed into.
+ *
+ * Excludes itself and anything already inside it: filing a category into its
+ * own descendant would detach that branch from the tree and orphan everything
+ * in it. The upward walk is loop-guarded so corrupt data can't hang it.
+ */
+export function filingTargets(trackers, tracker) {
+  const byId = new Map(trackers.map((t) => [t.id, t]));
+
+  const isInside = (candidate) => {
+    let parent = candidate.parentId;
+    const seen = new Set();
+    while (parent && !seen.has(parent)) {
+      if (parent === tracker?.id) return true;
+      seen.add(parent);
+      parent = byId.get(parent)?.parentId ?? null;
+    }
+    return false;
+  };
+
+  return trackers.filter(
+    (t) => t.type === 'category' && t.id !== tracker?.id && !isInside(t)
+  );
+}
+
+export async function loadTrackerParents() {
+  const raw = await AsyncStorage.getItem(PARENT_KEY);
   if (raw == null) return {};
   try {
     const parsed = JSON.parse(raw);
@@ -114,8 +152,8 @@ export async function loadTrackerCategories() {
   }
 }
 
-export async function saveTrackerCategories(map) {
-  await AsyncStorage.setItem(CATEGORY_KEY, JSON.stringify(map));
+export async function saveTrackerParents(map) {
+  await AsyncStorage.setItem(PARENT_KEY, JSON.stringify(map));
 }
 
 export async function loadTrackerOrder() {

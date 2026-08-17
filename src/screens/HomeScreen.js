@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
@@ -7,27 +7,19 @@ import VibeButton from '../components/ui/VibeButton';
 import TrackerCard from '../components/TrackerCard';
 import AddTrackerModal from '../components/AddTrackerModal';
 import JoinListModal from '../components/JoinListModal';
+import MoveTrackerModal from '../components/MoveTrackerModal';
 import { useTrackers } from '../store/TrackerContext';
-import { TRACKER_CATEGORIES } from '../lib/trackers';
-
-const ALL = 'All';
 
 export default function HomeScreen({ onOpen }) {
   const { trackers, loaded, addTracker, reorderTrackers } = useTrackers();
   const [adding, setAdding] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [filter, setFilter] = useState(ALL);
-
-  // Only categories actually in use are offered. An empty "Health" tab before
-  // any health tracker exists is just a dead end.
-  const usedCategories = useMemo(() => {
-    const present = new Set(trackers.map((t) => t.category));
-    return TRACKER_CATEGORIES.filter((c) => present.has(c));
-  }, [trackers]);
-
+  const [moving, setMoving] = useState(null);
+  // Only the top level. Anything filed inside a category appears on that
+  // category's own screen instead.
   const visible = useMemo(
-    () => (filter === ALL ? trackers : trackers.filter((t) => t.category === filter)),
-    [trackers, filter]
+    () => trackers.filter((t) => !t.parentId),
+    [trackers]
   );
 
   const handleCreate = (tracker) => {
@@ -42,30 +34,6 @@ export default function HomeScreen({ onOpen }) {
         <Text style={styles.title}>Trackers</Text>
       </View>
 
-      {/* Hidden until there's more than one category in play — a lone "All"
-          chip is just clutter. */}
-      {usedCategories.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-        >
-          {[ALL, ...usedCategories].map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => setFilter(c)}
-              style={[styles.filterChip, c === filter && styles.filterChipOn]}
-            >
-              <Text
-                style={[styles.filterText, c === filter && styles.filterTextOn]}
-              >
-                {c}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
       <ReorderableList
         data={visible}
         keyExtractor={(t) => t.id}
@@ -74,17 +42,20 @@ export default function HomeScreen({ onOpen }) {
         onReorder={({ from, to }) =>
           reorderTrackers(from, to, visible.map((t) => t.id))
         }
-        renderItem={({ item }) => (
-          <TrackerCard tracker={item} onPress={() => onOpen(item.id)} />
+        renderItem={({ item, index }) => (
+          <TrackerCard
+            tracker={item}
+            index={index}
+            onPress={() => onOpen(item.id)}
+            onHold={() => setMoving(item)}
+          />
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           loaded ? (
             <Text style={styles.empty}>
-              {filter === ALL
-                ? 'No trackers yet.\nAdd one to get started.'
-                : `Nothing in ${filter} yet.`}
+              No trackers yet.{'\n'}Add one to get started.
             </Text>
           ) : null
         }
@@ -104,6 +75,12 @@ export default function HomeScreen({ onOpen }) {
       />
 
       <JoinListModal visible={joining} onClose={() => setJoining(false)} />
+
+      <MoveTrackerModal
+        visible={!!moving}
+        tracker={moving}
+        onClose={() => setMoving(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -125,31 +102,6 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     textTransform: 'uppercase',
     fontFamily: theme.fonts.main,
-  },
-  filters: {
-    paddingHorizontal: 24,
-    paddingBottom: 4,
-    gap: 8,
-  },
-  filterChip: {
-    borderWidth: 2,
-    borderColor: theme.colors.inputBorder,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  filterChipOn: {
-    borderColor: theme.colors.vibeBlue,
-    backgroundColor: 'rgba(0, 198, 255, 0.1)',
-  },
-  filterText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
-  filterTextOn: {
-    color: theme.colors.vibeBlue,
   },
   list: {
     paddingHorizontal: 24,

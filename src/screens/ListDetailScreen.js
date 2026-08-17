@@ -182,10 +182,11 @@ export default function ListDetailScreen({
 
       <RenameModal
         visible={renaming}
+        tracker={tracker}
         initialName={tracker.name}
-        initialCategory={tracker.category}
+        initialParentId={tracker.parentId}
         onClose={() => setRenaming(false)}
-        onSubmit={(name, category) => renameTracker(tracker, name, category)}
+        onSubmit={(name, parentId) => renameTracker(tracker, name, parentId)}
       />
     </SafeAreaView>
   );

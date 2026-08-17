@@ -10,85 +10,95 @@ import HomeScreen from './src/screens/HomeScreen';
 import TimerDetailScreen from './src/screens/TimerDetailScreen';
 import ListDetailScreen from './src/screens/ListDetailScreen';
 import ItemDetailScreen from './src/screens/ItemDetailScreen';
+import CategoryDetailScreen from './src/screens/CategoryDetailScreen';
 import UpdateBanner from './src/components/ui/UpdateBanner';
 import { useAppUpdate } from './src/lib/useAppUpdate';
 
-// Tiny in-app router: home -> tracker detail -> item detail. Still a plain
-// state switch rather than a navigation library — three known routes don't
-// justify the dependency.
+// In-app router holding a real stack of tracker ids, because categories can
+// contain categories to any depth — so "one level up" isn't a fixed
+// destination any more. Still no navigation library: a stack of ids and an
+// optional open item is the whole model.
 function Router() {
   const { getTracker } = useTrackers();
-  const [route, setRoute] = useState({ name: 'home' });
+  const [stack, setStack] = useState([]);
+  const [itemId, setItemId] = useState(null);
 
-  const openTracker = useCallback((id) => setRoute({ name: 'detail', id }), []);
-  const openItem = useCallback(
-    (trackerId, itemId) => setRoute({ name: 'item', id: trackerId, itemId }),
-    []
-  );
-  const goHome = useCallback(() => setRoute({ name: 'home' }), []);
-  const backToTracker = useCallback(
-    () => setRoute((r) => ({ name: 'detail', id: r.id })),
-    []
-  );
+  const openTracker = useCallback((id) => {
+    setItemId(null);
+    setStack((s) => [...s, id]);
+  }, []);
 
-  // Android hardware back walks one level up the stack rather than exiting.
+  const openItem = useCallback((trackerId, id) => setItemId(id), []);
+
+  const goHome = useCallback(() => {
+    setItemId(null);
+    setStack([]);
+  }, []);
+
+  // One step up: out of an item first, then out of each nested category.
+  const goBack = useCallback(() => {
+    setItemId((currentItem) => {
+      if (currentItem) return null;
+      setStack((s) => s.slice(0, -1));
+      return null;
+    });
+  }, []);
+
+  // Replaces the current screen rather than stacking onto it — used when a
+  // tracker is shared and the local copy is swapped for the remote one, where
+  // pushing would leave a dead entry behind.
+  const replaceTracker = useCallback((id) => {
+    setItemId(null);
+    setStack((s) => (s.length ? [...s.slice(0, -1), id] : [id]));
+  }, []);
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (route.name === 'item') {
-        backToTracker();
-        return true;
-      }
-      if (route.name === 'detail') {
-        goHome();
+      if (itemId || stack.length) {
+        goBack();
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [route.name, goHome, backToTracker]);
+  }, [itemId, stack.length, goBack]);
 
-  if (route.name === 'item') {
-    const tracker = getTracker(route.id);
-    const item = tracker?.items?.find((i) => i.id === route.itemId);
-    // The item can vanish under us — someone else deleting it on a shared
-    // list, or a clear-completed. Fall back rather than render nothing.
-    if (!tracker) return <HomeScreen onOpen={openTracker} />;
-    if (!item) {
+  const tracker = stack.length ? getTracker(stack[stack.length - 1]) : null;
+
+  // The tracker can vanish under us — deleted here, or removed by someone
+  // else on a shared list. Drop back rather than render nothing.
+  if (stack.length && !tracker) {
+    return <HomeScreen onOpen={openTracker} />;
+  }
+
+  if (tracker) {
+    const item = itemId ? tracker.items?.find((i) => i.id === itemId) : null;
+    if (itemId && item) {
+      return <ItemDetailScreen tracker={tracker} item={item} onBack={goBack} />;
+    }
+
+    if (tracker.type === 'category') {
       return (
-        <ListDetailScreen
+        <CategoryDetailScreen
           tracker={tracker}
-          onBack={goHome}
-          onOpenItem={openItem}
+          onBack={goBack}
+          onOpen={openTracker}
         />
       );
     }
-    return (
-      <ItemDetailScreen
-        tracker={tracker}
-        item={item}
-        onBack={backToTracker}
-      />
-    );
-  }
 
-  if (route.name === 'detail') {
-    const tracker = getTracker(route.id);
-    // Guard against a deleted/missing tracker (fall back to home).
-    if (!tracker) {
-      return <HomeScreen onOpen={openTracker} />;
-    }
     return tracker.type === 'timer' ? (
       <TimerDetailScreen
         tracker={tracker}
-        onBack={goHome}
-        onOpenTracker={openTracker}
+        onBack={goBack}
+        onOpenTracker={replaceTracker}
       />
     ) : (
       <ListDetailScreen
         tracker={tracker}
-        onBack={goHome}
+        onBack={goBack}
         onOpenItem={openItem}
-        onOpenTracker={openTracker}
+        onOpenTracker={replaceTracker}
       />
     );
   }
