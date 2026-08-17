@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useCallback } from 'react';
+import { runOnJS } from 'react-native-reanimated';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
 import { fmtElapsedShort, resolveColor } from '../lib/format';
@@ -15,13 +16,27 @@ export default function TrackerCard({ tracker, index, onPress, onHold }) {
   // Provided by the enclosing ReorderableList; starts a drag when called.
   const drag = useReorderableDrag();
 
-  // A long press that ends where it began wasn't a reorder — the user held the
-  // card and let go, which is taken as "I want to do something with this one".
-  // The index guard matters because this fires for every cell, not just the
-  // one that moved.
-  useReorderableDragEnd((from, to) => {
-    if (from === to && from === index) onHold?.();
-  });
+  const hold = useCallback(() => onHold?.(), [onHold]);
+
+  // A long press that ends where it began wasn't a reorder — the card was held
+  // and released, which is taken as "do something with this one".
+  //
+  // This runs as a worklet on the UI thread: the library keeps the handlers in
+  // a reanimated shared value and calls them there. Touching React state
+  // directly from it crashes the app, so the hop back to JS is required, not
+  // decorative. The index guard matters because every cell is called, not just
+  // the one that moved.
+  const onDragEnd = useCallback(
+    (from, to) => {
+      'worklet';
+      if (from === to && from === index) {
+        runOnJS(hold)();
+      }
+    },
+    [index, hold]
+  );
+
+  useReorderableDragEnd(onDragEnd);
   const color = resolveColor(tracker.color);
   const active = tracker.type === 'timer' && tracker.startMs != null;
   const now = useNow(active);
