@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../theme/themes';
 import VibeInput from '../components/ui/VibeInput';
-import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import VibeCalendar from '../components/ui/VibeCalendar';
@@ -25,7 +24,8 @@ import { syncItemReminders, clearItemReminders } from '../services/reminders';
 import { resolveColor, fmtStart } from '../lib/format';
 
 export default function ItemDetailScreen({ tracker, item, onBack }) {
-  const { updateItemIn, toggleItemIn, removeItemFrom } = useTrackers();
+  // Ticking off lives on the list screen's checkbox, not here.
+  const { updateItemIn, removeItemFrom } = useTrackers();
   const { uid } = useAuth();
 
   const [text, setText] = useState(item.text ?? '');
@@ -265,14 +265,6 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             onClearDate={clearDue}
           />
 
-          <View style={styles.actions}>
-            <VibeButton
-              label={item.done ? 'Mark as not done' : 'Mark as done'}
-              variant={item.done ? 'default' : 'green'}
-              onPress={() => toggleItemIn(tracker, item.id)}
-            />
-          </View>
-
           <View style={styles.meta}>
             {item.createdAt ? (
               <Text style={styles.metaLine}>Added {fmtStart(item.createdAt)}</Text>
@@ -333,10 +325,6 @@ const styles = StyleSheet.create({
   note: {
     minHeight: 110,
     textAlignVertical: 'top',
-  },
-  actions: {
-    marginTop: 26,
-    alignItems: 'stretch',
   },
   meta: {
     marginTop: 26,
