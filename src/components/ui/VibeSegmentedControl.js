@@ -2,14 +2,23 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../../theme/themes';
 
-const VibeSegmentedControl = ({ options, selectedValue, onSelect, style }) => {
+// `vertical` stacks the options instead of squeezing them side by side, which
+// keeps labels readable once there are more than two.
+const VibeSegmentedControl = ({
+  options,
+  selectedValue,
+  onSelect,
+  style,
+  vertical = false,
+}) => {
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, vertical && styles.containerVertical, style]}>
       {options.map((option, index) => (
         <Pressable
           key={option.value}
           style={({ pressed }) => [
             styles.segment,
+            vertical && styles.segmentVertical,
             index === 0 && styles.firstSegment,
             index === options.length - 1 && styles.lastSegment,
             selectedValue === option.value && styles.selectedSegment,
@@ -41,6 +50,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: theme.sizes.borderRadius,
     gap: 2,
+  },
+  containerVertical: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  segmentVertical: {
+    // Full width and no flex-share: each row sizes to its own content.
+    flex: 0,
+    width: '100%',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
   },
   segment: {
     flex: 1,

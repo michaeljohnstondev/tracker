@@ -73,6 +73,14 @@ export default function RenameModal({
           style={[styles.sheet, { paddingBottom: 34 + keyboardHeight }]}
           onPress={(e) => e.stopPropagation()}
         >
+          {/* The whole sheet scrolls. With a long contents list and the
+              keyboard up, a category's sheet outgrew the screen and pushed the
+              name field out of sight — the one thing you opened it to edit. */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
           <Text style={styles.title}>Edit tracker</Text>
 
           <VibeInput
@@ -119,11 +127,7 @@ export default function RenameModal({
               {candidates.length === 0 ? (
                 <Text style={styles.hint}>Nothing else to file yet.</Text>
               ) : (
-                <ScrollView
-                  style={styles.contents}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                >
+                <View style={styles.contents}>
                   {candidates.map((c) => {
                     const inside = c.parentId === tracker.id;
                     return (
@@ -156,7 +160,7 @@ export default function RenameModal({
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                </View>
               )}
             </>
           )}
@@ -172,6 +176,7 @@ export default function RenameModal({
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
           </View>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -192,6 +197,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
+    // Capped so the sheet can never grow past the screen; its ScrollView takes
+    // over from there.
+    maxHeight: '88%',
   },
   title: {
     color: theme.colors.vibeCyan,
@@ -224,9 +232,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     fontFamily: theme.fonts.main,
   },
-  // Capped so a long list can't push the Save button off screen.
+  // Rendered inline rather than in its own scroll view: nesting a scroller
+  // inside the sheet's scroller makes both fight over the same drag.
   contents: {
-    maxHeight: 260,
+    marginTop: 2,
   },
   contentRow: {
     flexDirection: 'row',

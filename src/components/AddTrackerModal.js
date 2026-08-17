@@ -111,10 +111,13 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
             />
 
             <Text style={styles.label}>Type</Text>
+            {/* Stacked: three labels side by side were cramped enough to
+                shrink the text. */}
             <VibeSegmentedControl
               options={TYPE_OPTIONS}
               selectedValue={type}
               onSelect={setType}
+              vertical
             />
 
             {type === 'timer' && (
