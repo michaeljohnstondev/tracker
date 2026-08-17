@@ -6,6 +6,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { db } from './firebase';
 import { remindAt } from '../components/ItemReminders';
+import VibeAlert from '../components/ui/VibeAlert';
 
 // Pending reminders live in one flat collection, deliberately self-contained:
 // each doc carries the text to show and the people to notify, so the sweep
@@ -101,9 +102,13 @@ export async function syncItemReminders({
       )
     );
   } catch (err) {
-    // Never let reminder bookkeeping break saving the item itself — but log
-    // loudly. Swallowing this quietly is exactly how a denied query went
-    // unnoticed and reminders silently never got written.
+    // Saving the item still succeeds, but the user is told. A reminder that
+    // silently fails to schedule is worse than one that admits it — and
+    // swallowing this quietly is exactly how two failures hid from us.
     console.error('[reminders] sync FAILED:', err?.message || err);
+    VibeAlert(
+      'Reminder not scheduled',
+      `The item saved, but its reminder could not be stored.\n\n${err?.message || err}`
+    );
   }
 }

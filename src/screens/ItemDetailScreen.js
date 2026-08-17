@@ -170,9 +170,12 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
   useEffect(() => {
     if (!dirty) return undefined;
     const timer = setTimeout(flushNow, 2000);
-    // Re-running each keystroke restarts the timer, which is the point.
+    // Deps are the edited values, deliberately, not `save`. `save` gets a new
+    // identity on every render, so depending on it restarted this timer on any
+    // unrelated re-render — and on a shared list, incoming snapshots re-render
+    // often enough that the timer could keep resetting and never fire.
     return () => clearTimeout(timer);
-  }, [dirty, save, flushNow]);
+  }, [dirty, flushNow, text, note, dueAt, reminders]);
 
   // Two safety nets, because the timer alone loses work in two real cases.
   // Unmount covers hardware back and the header chevron, which tear the screen
