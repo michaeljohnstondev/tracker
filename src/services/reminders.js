@@ -1,132 +1,85 @@
-import {
-  collection,
-  doc,
-  deleteDoc,
-  setDoc,
-} from '@react-native-firebase/firestore';
+import { collection, doc, deleteDoc, setDoc } from '@react-native-firebase/firestore';
 import { db } from './firebase';
-import { remindAt } from '../components/ItemReminders';
 import VibeAlert from '../components/ui/VibeAlert';
 
-// Pending reminders live in one flat collection, deliberately self-contained:
-// each doc carries the text to show and the people to notify, so the sweep
-// never reads the item it came from.
+// Pending alarms live in one flat collection, deliberately self-contained:
+// each doc carries its own copy of the text and the list it belongs to, so the
+// sweep never reads the item it came from. That's what lets an alarm work on a
+// device-local tracker, whose item was never uploaded.
 //
-// That's what lets reminders work on a device-local tracker. The item itself
-// was never uploaded — only the reminder is, and only once you ask for one.
-//
-// Docs are deleted once sent, so "exists and fireAt has passed" is the whole
-// query. No status field, and therefore no composite index.
+// Docs are deleted once sent, so "fireAt has passed" is the whole query — one
+// auto-indexed field, no status flag, and a failed send simply leaves the doc
+// for the next pass.
 
 const remindersRef = () => collection(db, 'reminders');
 
-// Deterministic, so re-saving an item replaces its reminders instead of
-// accumulating duplicates — and so nothing here ever has to run a query.
+// Deterministic, so re-saving an item replaces its alarms rather than
+// accumulating duplicates — and so nothing here needs a query.
 //
-// That last part is load-bearing. The read rule requires the caller to be in
-// targetUids, and Firestore rejects any query it cannot prove satisfies the
-// rule from the query's own constraints. A `where('itemId', '==', ...)` lookup
-// proves nothing about targetUids, so it is denied outright. Addressing docs
-// by id sidesteps that, and avoids a composite index too.
-const reminderId = (itemId, offsetId) => `${itemId}__${offsetId}`;
+// That matters: the read rule requires the caller to be in targetUids, and
+// Firestore rejects any query it can't prove satisfies the rule from the
+// query's own filters. Addressing docs by id sidesteps that entirely.
+const reminderId = (itemId, at) => `${itemId}__${at}`;
 
-const deleteReminder = (itemId, offsetId) =>
-  deleteDoc(doc(remindersRef(), reminderId(itemId, offsetId)));
+const deleteReminder = (itemId, at) =>
+  deleteDoc(doc(remindersRef(), reminderId(itemId, at)));
 
 /**
- * Remove pending reminders for an item — deleted, completed, or cleared.
- * `offsetIds` is what the item last had stored, which is the only record of
- * what exists.
+ * Remove pending alarms for an item — deleted, completed, or cleared.
+ * `times` is what the item last had stored, the only record of what exists.
  */
-export async function clearItemReminders(itemId, offsetIds = []) {
-  if (!itemId || !offsetIds.length) return;
+export async function clearItemReminders(itemId, times = []) {
+  if (!itemId || !times.length) return;
   try {
-    await Promise.all(offsetIds.map((id) => deleteReminder(itemId, id)));
+    await Promise.all(times.map((at) => deleteReminder(itemId, at)));
   } catch (err) {
-    console.log('[reminders] clear skipped:', err?.message || err);
+    console.error('[reminders] clear failed:', err?.message || err);
   }
 }
 
 /**
- * Bring the stored reminders for one item in line with what the user chose.
- *
- * Writes are not awaited against the server anywhere here — like sharing, this
- * has to work with no signal and reconcile later.
+ * Bring stored alarms in line with what the user chose. Reconciled on every
+ * save rather than only on change: alarms listed on an item are not evidence
+ * that the matching documents exist, and an item carrying alarms with nothing
+ * scheduled could otherwise never repair itself.
  */
-export async function syncItemReminders({
-  tracker,
-  item,
-  uid,
-  dueAt,
-  previous = [],
-  reminders = [],
-}) {
-  // Temporary instrumentation while diagnosing why no reminder doc appears.
-  console.log('[reminders] sync called', {
-    uid,
-    itemId: item?.id,
-    done: item?.done,
-    dueAt,
-    reminders,
-    previous,
-    shared: !!tracker?.shared,
-  });
-
-  if (!uid || !item?.id) {
-    console.log('[reminders] bailed: no uid or item id');
-    return;
-  }
+export async function syncItemReminders({ tracker, item, uid, previous = [], reminders = [] }) {
+  if (!uid || !item?.id) return;
 
   try {
-    // A completed item shouldn't nag, and neither should one with no date.
-    const wanted =
-      !dueAt || item.done
-        ? []
-        : reminders.filter((id) => remindAt(dueAt, id) > Date.now());
-
+    // A completed item shouldn't nag, and an alarm already in the past can
+    // never fire.
+    const wanted = item.done ? [] : reminders.filter((at) => at > Date.now());
     const keep = new Set(wanted);
 
-    // Drop anything no longer wanted, including offsets that became
-    // unreachable because the date moved nearer.
     await Promise.all(
-      previous.filter((id) => !keep.has(id)).map((id) => deleteReminder(item.id, id))
+      previous.filter((at) => !keep.has(at)).map((at) => deleteReminder(item.id, at))
     );
 
-    console.log('[reminders] wanted', wanted, 'now', Date.now());
+    if (!wanted.length) return;
 
-    if (!wanted.length) {
-      console.log('[reminders] bailed: nothing to schedule');
-      return;
-    }
-
-    // Only ever the author here. Resolving a shared list's members would mean
-    // querying memberships by listId, and that query is denied — its read rule
-    // depends on fields the filter doesn't constrain, which Firestore refuses
-    // to allow. The sweep expands this to every current member at send time
-    // using the Admin SDK, which is both permitted and more correct, since
-    // membership can change after a reminder is set.
+    // Only the author. Resolving a shared list's members would need a query on
+    // memberships that the rules can't permit; the sweep expands this to every
+    // current member at send time via the Admin SDK, which is also more
+    // correct since membership can change after an alarm is set.
     const targetUids = [uid];
 
     await Promise.all(
-      wanted.map((offsetId) => {
-        console.log('[reminders] writing', reminderId(item.id, offsetId));
-        return setDoc(doc(remindersRef(), reminderId(item.id, offsetId)), {
+      wanted.map((at) =>
+        setDoc(doc(remindersRef(), reminderId(item.id, at)), {
           itemId: item.id,
           listId: tracker?.shared ? tracker.remoteId : null,
           trackerName: tracker?.name ?? '',
           itemText: item.text ?? '',
           targetUids,
-          fireAt: remindAt(dueAt, offsetId),
+          fireAt: at,
           createdBy: uid,
-        });
-      })
+        })
+      )
     );
-
-    console.log('[reminders] wrote', wanted.length);
   } catch (err) {
-    // Saving the item still succeeds, but the user is told. A reminder that
-    // silently fails to schedule is worse than one that admits it — and
-    // swallowing this quietly is exactly how two failures hid from us.
+    // Saving the item still succeeds, but say so. An alarm that silently
+    // fails to schedule is worse than one that admits it.
     console.error('[reminders] sync FAILED:', err?.message || err);
     VibeAlert(
       'Reminder not scheduled',

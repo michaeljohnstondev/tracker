@@ -14,9 +14,7 @@ import theme from '../theme/themes';
 import VibeInput from '../components/ui/VibeInput';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
-import VibeCalendar from '../components/ui/VibeCalendar';
-import VibeTimePicker from '../components/ui/VibeTimePicker';
-import ItemReminders, { remindAt } from '../components/ItemReminders';
+import ItemReminders, { normalizeReminders } from '../components/ItemReminders';
 import { useTrackers } from '../store/TrackerContext';
 import { useAuth } from '../store/AuthContext';
 import { ensurePushPermission } from '../services/fcm';
@@ -30,12 +28,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
 
   const [text, setText] = useState(item.text ?? '');
   const [note, setNote] = useState(item.note ?? '');
-  const [dueAt, setDueAt] = useState(item.dueAt ?? null);
-  const [reminders, setReminders] = useState(item.reminders ?? []);
-  // null | 'date' | 'time' — due dates are picked in two steps, same as a
-  // fast's start time.
-  const [dueStage, setDueStage] = useState(null);
-  const [pendingDue, setPendingDue] = useState(null);
+  const [reminders, setReminders] = useState(normalizeReminders(item.reminders));
 
   const color = resolveColor(tracker.color);
 
@@ -50,79 +43,28 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     setNote(item.note ?? '');
   }, [item.id, item.note]);
 
-  useEffect(() => {
-    setDueAt(item.dueAt ?? null);
-  }, [item.id, item.dueAt]);
-
   // Compared by contents, not by identity. item.reminders is an array, and a
   // fresh one arrives on every Firestore snapshot and every local tracker
   // update — so depending on the array itself re-ran this effect constantly
-  // and wiped a reminder the moment it was added, before autosave could
-  // store it. Text, note and dueAt are primitives and don't have this problem.
-  const storedReminderKey = (item.reminders ?? []).join(',');
+  // and wiped a reminder the moment it was added, before autosave could store
+  // it. Text and note are strings and don't have this problem.
+  const storedReminderKey = normalizeReminders(item.reminders).join(',');
   useEffect(() => {
-    setReminders(item.reminders ?? []);
+    setReminders(normalizeReminders(item.reminders));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id, storedReminderKey]);
-
-  const openDuePicker = useCallback(() => {
-    setPendingDue(dueAt != null ? new Date(dueAt) : new Date());
-    setDueStage('date');
-  }, [dueAt]);
-
-  const onDueDate = useCallback((date) => {
-    setPendingDue(date);
-    setDueStage('time');
-  }, []);
-
-  const onDueTime = useCallback(
-    (time) => {
-      setDueStage(null);
-      const base = pendingDue ?? new Date();
-      const combined = new Date(
-        base.getFullYear(),
-        base.getMonth(),
-        base.getDate(),
-        time.getHours(),
-        time.getMinutes(),
-        0,
-        0
-      );
-      const ms = combined.getTime();
-      // Picking today then a time earlier than now is the easy mistake the
-      // calendar's date floor can't catch.
-      if (ms <= Date.now()) {
-        VibeAlert(
-          'That time has passed',
-          'Pick a moment in the future, or nothing would ever fire.'
-        );
-        return;
-      }
-      setDueAt(ms);
-      // Drop any offsets that the new, nearer date has pushed into the past.
-      setReminders((prev) => prev.filter((id) => remindAt(ms, id) > Date.now()));
-    },
-    [pendingDue]
-  );
-
-  const clearDue = useCallback(() => {
-    setDueAt(null);
-    // Reminders are offsets from the due date; without one they'd have
-    // nothing to count back from.
-    setReminders([]);
-  }, []);
 
   // What still differs from what's stored. Drives the Save button, so there's
   // a visible answer to "did that save?".
   const pendingText = text.trim();
   const pendingNote = note.trim();
+  const storedReminders = normalizeReminders(item.reminders);
   const sameReminders =
-    reminders.length === (item.reminders ?? []).length &&
-    reminders.every((r) => (item.reminders ?? []).includes(r));
+    reminders.length === storedReminders.length &&
+    reminders.every((r) => storedReminders.includes(r));
   const dirty =
     (!!pendingText && pendingText !== item.text) ||
     pendingNote !== (item.note ?? '') ||
-    dueAt !== (item.dueAt ?? null) ||
     !sameReminders;
 
   // Writes are batched rather than per-keystroke: on a shared list every
@@ -136,27 +78,23 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     // instead of saving.
     if (t && t !== item.text) patch.text = t;
     if (n !== (item.note ?? '')) patch.note = n;
-    if (dueAt !== (item.dueAt ?? null)) patch.dueAt = dueAt;
     if (!sameReminders) patch.reminders = reminders;
 
     if (Object.keys(patch).length) updateItemIn(tracker, item.id, patch);
 
-    // Reconciled unconditionally, not only when something changed. Reminders
-    // stored on an item are not proof that the matching documents exist — any
-    // item whose reminders were set by an earlier build has them on the item
-    // and nothing scheduled. Bailing out on an empty patch meant those could
-    // never be repaired: the UI showed a reminder that would never fire.
-    //
-    // Re-writing identical docs is harmless; ids are deterministic.
+    // Reconciled unconditionally, not only when something changed. Alarms
+    // listed on an item are not proof that the matching documents exist — an
+    // item carrying alarms with nothing scheduled could otherwise never
+    // repair itself. Re-writing identical docs is harmless; ids are
+    // deterministic.
     syncItemReminders({
       tracker,
       item,
       uid,
-      dueAt,
-      previous: item.reminders ?? [],
+      previous: storedReminders,
       reminders,
     });
-  }, [text, note, dueAt, reminders, sameReminders, item, tracker, uid, updateItemIn]);
+  }, [text, note, reminders, storedReminders, sameReminders, item, tracker, uid, updateItemIn]);
 
   const flushRef = useRef(save);
   flushRef.current = save;
@@ -178,7 +116,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     // unrelated re-render — and on a shared list, incoming snapshots re-render
     // often enough that the timer could keep resetting and never fire.
     return () => clearTimeout(timer);
-  }, [dirty, flushNow, text, note, dueAt, reminders]);
+  }, [dirty, flushNow, text, note, reminders]);
 
   // Two safety nets, because the timer alone loses work in two real cases.
   // Unmount covers hardware back and the header chevron, which tear the screen
@@ -205,7 +143,7 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           onBack();
           removeItemFrom(tracker, item.id);
           // Otherwise a deleted item still buzzes you next week.
-          clearItemReminders(item.id, item.reminders ?? []);
+          clearItemReminders(item.id, normalizeReminders(item.reminders));
         },
       },
     ]);
@@ -260,9 +198,6 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
               if (next.length > reminders.length) ensurePushPermission(uid);
               setReminders(next);
             }}
-            dueAt={dueAt}
-            onPickDate={openDuePicker}
-            onClearDate={clearDue}
           />
 
           <View style={styles.meta}>
@@ -281,26 +216,6 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Mounted only while open: VibeCalendar seeds its selection once, so a
-          persistent instance would reopen on the previous pick. */}
-      {dueStage === 'date' && (
-        <VibeCalendar
-          visible
-          initialDate={pendingDue}
-          minimumDate={new Date()}
-          onConfirm={onDueDate}
-          onClose={() => setDueStage(null)}
-        />
-      )}
-
-      <VibeTimePicker
-        visible={dueStage === 'time'}
-        onClose={() => setDueStage(null)}
-        onConfirm={onDueTime}
-        initialTime={pendingDue}
-        confirmText="Set"
-      />
     </SafeAreaView>
   );
 }

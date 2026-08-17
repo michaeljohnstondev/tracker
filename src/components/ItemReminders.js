@@ -1,342 +1,133 @@
 import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  Keyboard,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import theme from '../theme/themes';
-import VibeInput from './ui/VibeInput';
-import VibeButton from './ui/VibeButton';
-import VibeDropdown from './ui/VibeDropdown';
 import VibeAlert from './ui/VibeAlert';
+import VibeCalendar from './ui/VibeCalendar';
+import VibeTimePicker from './ui/VibeTimePicker';
 import { fmtStart } from '../lib/format';
 
-// Reminder offsets, ported from bvs-app's ReminderListSection. The preset
-// ladder, the template-id scheme ("15m", "1d", "2h"), the parse/format helpers
-// and the validation rules are all kept identical, so reminder ids mean the
-// same thing in both apps if they're ever unified.
+// Alarms on an item, stored as absolute timestamps.
 //
-// What's dropped is the bvs-specific plumbing: CustomTemplateService, the
-// hosting/guest userContext split, the alert *context* (tracker's VibeAlert is
-// a plain function) and add-to-calendar. This takes a plain value/onChange
-// pair instead.
+// This started as a port of bvs-app's ReminderListSection, which expresses
+// reminders as offsets before an event — "1 day before", "2 hours before".
+// That's right for an event, which has its own time independent of any
+// reminder. An item on a list has no such time: the moment you want telling
+// about it IS the thing. Offsets forced two values to express one, and made
+// "remind me Saturday morning" a subtraction problem.
+//
+// So the offset ladder is gone. You pick the moment, the way you'd set an
+// alarm. Several are allowed, since "the day before" and "an hour before" is
+// a reasonable thing to want — you just say when each one is.
 
-const PRESET_REMINDERS = [
-  { amount: 15, unit: 'minutes', label: '15 min' },
-  { amount: 30, unit: 'minutes', label: '30 min' },
-  { amount: 1, unit: 'hours', label: '1 hour' },
-  { amount: 2, unit: 'hours', label: '2 hours' },
-  { amount: 1, unit: 'days', label: '1 day' },
-  { amount: 1, unit: 'weeks', label: '1 week' },
-];
-
-const UNIT_MAP = { m: 'minutes', h: 'hours', d: 'days', w: 'weeks', x: 'months' };
-const UNIT_ABBR = { minutes: 'm', hours: 'h', days: 'd', weeks: 'w', months: 'x' };
-
-const UNIT_OPTIONS = [
-  { label: 'Minutes', value: 'minutes' },
-  { label: 'Hours', value: 'hours' },
-  { label: 'Days', value: 'days' },
-  { label: 'Weeks', value: 'weeks' },
-  { label: 'Months', value: 'months' },
-];
-
-// Old-format ids from bvs, kept so a template written by that app still parses.
-const OLD_ID_MAP = {
-  '15min': { amount: 15, unit: 'minutes', label: '15 min' },
-  '30min': { amount: 30, unit: 'minutes', label: '30 min' },
-  '1hour': { amount: 1, unit: 'hours', label: '1 hour' },
-  '2hour': { amount: 2, unit: 'hours', label: '2 hours' },
-  '1day': { amount: 1, unit: 'days', label: '1 day' },
-  '1week': { amount: 1, unit: 'weeks', label: '1 week' },
-};
-
-const MINUTES = {
-  minutes: 1,
-  hours: 60,
-  days: 1440,
-  weeks: 10080,
-  months: 43200,
-};
-
-function unitLabel(amount, unit) {
-  const labels = {
-    minutes: 'min',
-    hours: amount === 1 ? 'hour' : 'hours',
-    days: amount === 1 ? 'day' : 'days',
-    weeks: amount === 1 ? 'week' : 'weeks',
-    months: amount === 1 ? 'month' : 'months',
-  };
-  return labels[unit] || unit;
+// Anything already stored in the old shape (offset ids against a due date) is
+// discarded rather than half-converted. Only ever a handful of test entries,
+// and a silently wrong alarm time is worse than none.
+export function normalizeReminders(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v) => typeof v === 'number' && Number.isFinite(v));
 }
 
-export function parseTemplateId(templateId) {
-  if (OLD_ID_MAP[templateId]) return { id: templateId, ...OLD_ID_MAP[templateId] };
+export default function ItemReminders({ value = [], onChange }) {
+  const [stage, setStage] = useState(null);
+  const [pendingDate, setPendingDate] = useState(null);
 
-  const match = String(templateId).match(/^(\d+)([mhdwx])$/);
-  if (match) {
-    const amount = parseInt(match[1], 10);
-    const unit = UNIT_MAP[match[2]] || 'minutes';
-    return { id: templateId, amount, unit, label: `${amount} ${unitLabel(amount, unit)}` };
-  }
-  return { id: templateId, amount: 0, unit: 'minutes', label: String(templateId) };
-}
+  const times = normalizeReminders(value).slice().sort((a, b) => a - b);
 
-export function toMinutes(template) {
-  return template.amount * (MINUTES[template.unit] || 1);
-}
-
-export function makeId(amount, unit) {
-  return `${amount}${UNIT_ABBR[unit]}`;
-}
-
-/** Absolute fire time for a reminder id, given the due timestamp. */
-export function remindAt(dueAtMs, templateId) {
-  return dueAtMs - toMinutes(parseTemplateId(templateId)) * 60 * 1000;
-}
-
-export default function ItemReminders({
-  value = [],
-  onChange,
-  dueAt,
-  onPickDate,
-  onClearDate,
-  disabled,
-}) {
-  // A reminder is an offset counted back from the due moment, so a long
-  // offset on a near date lands in the past. Those are refused rather than
-  // silently accepted and never fired.
-  const isPast = useCallback(
-    (id) => dueAt != null && remindAt(dueAt, id) <= Date.now(),
-    [dueAt]
-  );
-
-  const [showModal, setShowModal] = useState(false);
-  const [showCustom, setShowCustom] = useState(false);
-  const [customAmount, setCustomAmount] = useState('');
-  const [customUnit, setCustomUnit] = useState('minutes');
-
-  const active = value
-    .map(parseTemplateId)
-    .sort((a, b) => toMinutes(a) - toMinutes(b));
-
-  const closeModal = useCallback(() => {
-    setShowModal(false);
-    setShowCustom(false);
-    setCustomAmount('');
-    setCustomUnit('minutes');
+  const open = useCallback(() => {
+    setPendingDate(new Date());
+    setStage('date');
   }, []);
 
-  const addId = useCallback(
-    (id) => {
-      if (value.includes(id)) return false;
-      onChange([...value, id]);
-      return true;
-    },
-    [value, onChange]
-  );
+  const onDate = useCallback((date) => {
+    setPendingDate(date);
+    setStage('time');
+  }, []);
 
-  const addPreset = useCallback(
-    (preset) => {
-      addId(makeId(preset.amount, preset.unit));
-      closeModal();
-    },
-    [addId, closeModal]
-  );
+  const onTime = useCallback(
+    (time) => {
+      setStage(null);
+      const base = pendingDate ?? new Date();
+      const at = new Date(
+        base.getFullYear(),
+        base.getMonth(),
+        base.getDate(),
+        time.getHours(),
+        time.getMinutes(),
+        0,
+        0
+      ).getTime();
 
-  // Same validation as bvs: a positive integer under 1000, no duplicates.
-  const addCustom = useCallback(() => {
-    Keyboard.dismiss();
-    const amount = parseInt(customAmount, 10);
-    if (!customAmount?.trim() || !amount || amount <= 0) {
-      VibeAlert('Invalid input', 'Enter a number greater than 0');
-      return;
-    }
-    if (amount > 999) {
-      VibeAlert('Invalid input', 'Enter a number less than 1000');
-      return;
-    }
-    const id = makeId(amount, customUnit);
-    if (value.includes(id)) {
-      VibeAlert('Duplicate', `"${amount} ${unitLabel(amount, customUnit)}" already exists`);
-      return;
-    }
-    if (isPast(id)) {
-      VibeAlert(
-        'Already passed',
-        `${amount} ${unitLabel(amount, customUnit)} before this is in the past, so it would never fire.`
-      );
-      return;
-    }
-    addId(id);
-    closeModal();
-  }, [customAmount, customUnit, value, addId, closeModal, isPast]);
+      if (at <= Date.now()) {
+        VibeAlert(
+          'That time has passed',
+          'Pick a moment in the future, or the alarm would never go off.'
+        );
+        return;
+      }
+      if (times.includes(at)) return;
+
+      onChange([...times, at].sort((a, b) => a - b));
+    },
+    [pendingDate, times, onChange]
+  );
 
   const remove = useCallback(
-    (id) => onChange(value.filter((v) => v !== id)),
-    [value, onChange]
+    (at) => onChange(times.filter((t) => t !== at)),
+    [times, onChange]
   );
 
   return (
     <>
-      {/* One card, one heading. The date is the first row rather than its own
-          titled section — reminders are offsets from it, so they belong to the
-          same block. */}
       <View style={styles.card}>
-        {dueAt == null ? (
-          <TouchableOpacity onPress={onPickDate} style={styles.addRow}>
-            <Text style={styles.addRowText}>+ Set date & time</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <View style={[styles.row, styles.rowBorder]}>
-              <TouchableOpacity onPress={onPickDate} style={styles.dateMain}>
-                <Text style={styles.rowLabel}>{fmtStart(dueAt)}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={onClearDate}
-                style={styles.deleteBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={styles.deleteBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {active.length === 0 && (
-              <View style={[styles.row, styles.rowBorder]}>
-                <Text style={styles.emptyText}>No reminders set</Text>
-              </View>
-            )}
-
-            {active.map((template) => (
-              <View key={template.id} style={[styles.row, styles.rowBorder]}>
-                <Text style={styles.rowLabel}>{template.label} before</Text>
-                <TouchableOpacity
-                  onPress={() => remove(template.id)}
-                  style={styles.deleteBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Text style={styles.deleteBtnText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            <TouchableOpacity
-              onPress={() => setShowModal(true)}
-              style={styles.addRow}
-              disabled={disabled}
-            >
-              <Text style={styles.addRowText}>+ Add Reminder</Text>
-            </TouchableOpacity>
-          </>
+        {times.length === 0 && (
+          <View style={[styles.row, styles.rowBorder]}>
+            <Text style={styles.emptyText}>No reminders set</Text>
+          </View>
         )}
-      </View>
 
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeModal}
-      >
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={closeModal}
-        >
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Add Reminder</Text>
-
-            <View style={styles.presetGrid}>
-              {PRESET_REMINDERS.map((preset) => {
-                const id = makeId(preset.amount, preset.unit);
-                const taken = value.includes(id);
-                // Dimmed rather than removed, so the ladder keeps its shape
-                // as the date moves around.
-                const past = isPast(id);
-                const dim = taken || past;
-                return (
-                  <TouchableOpacity
-                    key={id}
-                    style={[styles.presetBtn, dim && styles.presetBtnActive]}
-                    onPress={() => !dim && addPreset(preset)}
-                    disabled={dim}
-                  >
-                    <Text
-                      style={[styles.presetText, dim && styles.presetTextActive]}
-                    >
-                      {preset.label}
-                    </Text>
-                    {taken && <Text style={styles.checkmark}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {!showCustom ? (
-              <TouchableOpacity
-                onPress={() => setShowCustom(true)}
-                style={styles.customToggle}
-              >
-                <Text style={styles.customToggleText}>Custom Time</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.customForm}>
-                <View style={styles.customRow}>
-                  <VibeInput
-                    value={customAmount}
-                    onChangeText={(t) => setCustomAmount(t.replace(/[^0-9]/g, ''))}
-                    keyboardType="numeric"
-                    maxLength={3}
-                    autoFocus
-                    style={styles.customInput}
-                    autoComplete="off"
-                    textContentType="none"
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    spellCheck={false}
-                  />
-                  <VibeDropdown
-                    options={UNIT_OPTIONS}
-                    selectedValue={customUnit}
-                    onSelect={setCustomUnit}
-                    placeholder="Unit"
-                    style={styles.customDropdown}
-                    hideSelectedFromList
-                  />
-                </View>
-                <VibeButton
-                  label="Add Custom"
-                  onPress={addCustom}
-                  variant="toggle"
-                  color="green"
-                  disabled={!customAmount || parseInt(customAmount, 10) <= 0}
-                  style={styles.customAddBtn}
-                />
-              </View>
-            )}
-
-            <TouchableOpacity onPress={closeModal} style={styles.cancelBtn}>
-              <Text style={styles.cancelText}>Cancel</Text>
+        {times.map((at) => (
+          <View key={at} style={[styles.row, styles.rowBorder]}>
+            <Text style={styles.rowLabel}>{fmtStart(at)}</Text>
+            <TouchableOpacity
+              onPress={() => remove(at)}
+              style={styles.deleteBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.deleteBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
+        ))}
+
+        <TouchableOpacity onPress={open} style={styles.addRow}>
+          <Text style={styles.addRowText}>+ Add Reminder</Text>
         </TouchableOpacity>
-      </Modal>
+      </View>
+
+      {/* Mounted only while open: VibeCalendar seeds its selection once, so a
+          persistent instance would reopen on the previous pick. */}
+      {stage === 'date' && (
+        <VibeCalendar
+          visible
+          initialDate={pendingDate}
+          minimumDate={new Date()}
+          onConfirm={onDate}
+          onClose={() => setStage(null)}
+        />
+      )}
+
+      <VibeTimePicker
+        visible={stage === 'time'}
+        onClose={() => setStage(null)}
+        onConfirm={onTime}
+        initialTime={pendingDate}
+        confirmText="Set"
+      />
     </>
   );
 }
 
-// Styles ported from bvs-app's ReminderListSection so the two apps look the
-// same. Only change: fontFamily uses theme.fonts.main, since tracker's theme
-// has no comicBold.
+// Card and row styling ported from bvs-app's ReminderListSection, with
+// fontFamily on theme.fonts.main since tracker's theme has no comicBold.
 const styles = StyleSheet.create({
   card: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
@@ -368,9 +159,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     fontFamily: theme.fonts.main,
   },
-  dateMain: {
-    flex: 1,
-  },
   deleteBtn: {
     padding: 4,
   },
@@ -387,123 +175,6 @@ const styles = StyleSheet.create({
     color: theme.colors.vibeBlue,
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    backgroundColor: '#001020',
-    borderRadius: theme.sizes.borderRadius,
-    borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
-    padding: 24,
-    width: '100%',
-    maxWidth: 360,
-  },
-  modalTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 20,
-    textAlign: 'center',
-    fontFamily: theme.fonts.main,
-  },
-  presetGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'center',
-  },
-  presetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 198, 255, 0.1)',
-    borderWidth: 2,
-    borderColor: theme.colors.vibeBlue,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minWidth: 90,
-    justifyContent: 'center',
-  },
-  presetBtnActive: {
-    backgroundColor: 'rgba(0, 198, 255, 0.05)',
-    borderColor: theme.colors.inputBorder,
-  },
-  presetText: {
-    color: theme.colors.vibeBlue,
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
-  presetTextActive: {
-    color: theme.colors.textSecondary,
-  },
-  checkmark: {
-    color: theme.colors.vibeGreen,
-    fontSize: 14,
-    fontWeight: '700',
-    marginLeft: 6,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.inputBorder,
-  },
-  dividerText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    marginHorizontal: 12,
-    fontFamily: theme.fonts.main,
-  },
-  customToggle: {
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  customToggleText: {
-    color: theme.colors.vibeCyan,
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
-  customForm: {
-    gap: 12,
-  },
-  customRow: {
-    flexDirection: 'row',
-    gap: 12,
-    zIndex: 99,
-    elevation: 99,
-  },
-  customInput: {
-    width: 70,
-    textAlign: 'center',
-  },
-  customDropdown: {
-    flex: 1,
-  },
-  customAddBtn: {
-    marginTop: 4,
-  },
-  cancelBtn: {
-    alignItems: 'center',
-    marginTop: 16,
-    paddingVertical: 8,
-  },
-  cancelText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
     fontFamily: theme.fonts.main,
   },
 });
