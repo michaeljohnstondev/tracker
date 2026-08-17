@@ -138,13 +138,16 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
     if (n !== (item.note ?? '')) patch.note = n;
     if (dueAt !== (item.dueAt ?? null)) patch.dueAt = dueAt;
     if (!sameReminders) patch.reminders = reminders;
-    if (!Object.keys(patch).length) return;
 
-    updateItemIn(tracker, item.id, patch);
+    if (Object.keys(patch).length) updateItemIn(tracker, item.id, patch);
 
-    // Keep the scheduled reminders in step. Text changes matter too — the
-    // notification carries its own copy of it. `previous` is what was stored,
-    // which is the only record of which reminder docs currently exist.
+    // Reconciled unconditionally, not only when something changed. Reminders
+    // stored on an item are not proof that the matching documents exist — any
+    // item whose reminders were set by an earlier build has them on the item
+    // and nothing scheduled. Bailing out on an empty patch meant those could
+    // never be repaired: the UI showed a reminder that would never fire.
+    //
+    // Re-writing identical docs is harmless; ids are deterministic.
     syncItemReminders({
       tracker,
       item,
