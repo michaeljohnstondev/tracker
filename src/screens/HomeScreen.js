@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
-import TrackerCard from '../components/TrackerCard';
+import TrackerList from '../components/TrackerList';
 import AddTrackerModal from '../components/AddTrackerModal';
 import JoinListModal from '../components/JoinListModal';
 import MoveTrackerModal from '../components/MoveTrackerModal';
@@ -34,22 +33,15 @@ export default function HomeScreen({ onOpen }) {
         <Text style={styles.title}>Trackers</Text>
       </View>
 
-      <ReorderableList
+      <TrackerList
         data={visible}
-        keyExtractor={(t) => t.id}
-        // Indices are positions within the filtered view, so the ids are
-        // passed along for mapping back onto the full order.
-        onReorder={({ from, to }) =>
+        onOpen={onOpen}
+        onHold={setMoving}
+        // Indices are positions within this view, so the ids go along for
+        // mapping back onto the full order.
+        onReorder={(from, to) =>
           reorderTrackers(from, to, visible.map((t) => t.id))
         }
-        renderItem={({ item, index }) => (
-          <TrackerCard
-            tracker={item}
-            index={index}
-            onPress={() => onOpen(item.id)}
-            onHold={() => setMoving(item)}
-          />
-        )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={

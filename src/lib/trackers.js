@@ -141,6 +141,33 @@ export function filingTargets(trackers, tracker) {
   );
 }
 
+/**
+ * Trackers that may be placed inside a category.
+ *
+ * Excludes the category itself and any of its ancestors — putting a category
+ * inside its own descendant would close the tree into a loop and detach that
+ * whole branch.
+ */
+export function contentCandidates(trackers, category) {
+  if (!category) return [];
+  const byId = new Map(trackers.map((t) => [t.id, t]));
+
+  const isAncestorOfCategory = (candidate) => {
+    let parent = category.parentId;
+    const seen = new Set();
+    while (parent && !seen.has(parent)) {
+      if (parent === candidate.id) return true;
+      seen.add(parent);
+      parent = byId.get(parent)?.parentId ?? null;
+    }
+    return false;
+  };
+
+  return trackers.filter(
+    (t) => t.id !== category.id && !isAncestorOfCategory(t)
+  );
+}
+
 export async function loadTrackerParents() {
   const raw = await AsyncStorage.getItem(PARENT_KEY);
   if (raw == null) return {};

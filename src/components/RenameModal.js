@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
+import { Modal, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import theme from '../theme/themes';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 import { useTrackers } from '../store/TrackerContext';
-import { filingTargets } from '../lib/trackers';
+import { filingTargets, contentCandidates } from '../lib/trackers';
+import { resolveColor } from '../lib/format';
 
 // Edit sheet for a tracker's name and which category it sits in.
 export default function RenameModal({
@@ -16,7 +17,7 @@ export default function RenameModal({
   onClose,
   onSubmit,
 }) {
-  const { trackers } = useTrackers();
+  const { trackers, setTrackerParent } = useTrackers();
   const [name, setName] = useState(initialName ?? '');
   const [parentId, setParentId] = useState(initialParentId ?? null);
   const keyboardHeight = useKeyboardHeight();
@@ -24,6 +25,24 @@ export default function RenameModal({
   const categories = useMemo(
     () => (tracker ? filingTargets(trackers, tracker) : []),
     [trackers, tracker]
+  );
+
+  const isCategory = tracker?.type === 'category';
+
+  // For a category, the sheet doubles as its contents list.
+  const candidates = useMemo(
+    () => (isCategory ? contentCandidates(trackers, tracker) : []),
+    [isCategory, trackers, tracker]
+  );
+
+  // Ticking files something in; unticking pushes it up to wherever this
+  // category itself lives, rather than dumping it at the top level.
+  const toggleContent = useCallback(
+    (child) => {
+      const inside = child.parentId === tracker.id;
+      setTrackerParent(child.id, inside ? tracker.parentId ?? null : tracker.id);
+    },
+    [tracker, setTrackerParent]
   );
 
   // Re-seed on open rather than on every prop change, so a rename landing from
@@ -94,6 +113,54 @@ export default function RenameModal({
             </>
           )}
 
+          {isCategory && (
+            <>
+              <Text style={styles.label}>What's in here</Text>
+              {candidates.length === 0 ? (
+                <Text style={styles.hint}>Nothing else to file yet.</Text>
+              ) : (
+                <ScrollView
+                  style={styles.contents}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  {candidates.map((c) => {
+                    const inside = c.parentId === tracker.id;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => toggleContent(c)}
+                        style={styles.contentRow}
+                      >
+                        <View
+                          style={[
+                            styles.checkbox,
+                            { borderColor: resolveColor(c.color) },
+                            inside && {
+                              backgroundColor: resolveColor(c.color),
+                            },
+                          ]}
+                        >
+                          {inside ? <Text style={styles.check}>✓</Text> : null}
+                        </View>
+                        <Text style={styles.contentLabel} numberOfLines={1}>
+                          {c.name}
+                        </Text>
+                        <Text style={styles.contentType}>
+                          {c.type === 'category'
+                            ? '🗂'
+                            : c.type === 'timer'
+                              ? '⏱'
+                              : '☰'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </>
+          )}
+
           <View style={styles.actions}>
             <VibeButton
               label="Save"
@@ -150,6 +217,45 @@ const styles = StyleSheet.create({
   chip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
+  },
+  hint: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+    fontFamily: theme.fonts.main,
+  },
+  // Capped so a long list can't push the Save button off screen.
+  contents: {
+    maxHeight: 260,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  check: {
+    color: theme.colors.black,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  contentLabel: {
+    flex: 1,
+    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontFamily: theme.fonts.main,
+  },
+  contentType: {
+    fontSize: 14,
+    marginLeft: 8,
   },
   actions: {
     marginTop: 22,

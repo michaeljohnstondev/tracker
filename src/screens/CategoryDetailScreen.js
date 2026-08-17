@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
-import TrackerCard from '../components/TrackerCard';
+import TrackerList from '../components/TrackerList';
 import AddTrackerModal from '../components/AddTrackerModal';
 import ScreenHeader from '../components/ScreenHeader';
 import RenameModal from '../components/RenameModal';
@@ -76,22 +75,15 @@ export default function CategoryDetailScreen({ tracker, onBack, onOpen }) {
         onDelete={confirmDelete}
       />
 
-      <ReorderableList
+      <TrackerList
         data={children}
-        keyExtractor={(t) => t.id}
+        onOpen={onOpen}
+        onHold={setMoving}
         // Indices are positions among this category's children, so the ids go
         // along for mapping back onto the full order.
-        onReorder={({ from, to }) =>
+        onReorder={(from, to) =>
           reorderTrackers(from, to, children.map((t) => t.id))
         }
-        renderItem={({ item, index }) => (
-          <TrackerCard
-            tracker={item}
-            index={index}
-            onPress={() => onOpen(item.id)}
-            onHold={() => setMoving(item)}
-          />
-        )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
