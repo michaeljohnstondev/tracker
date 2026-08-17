@@ -20,10 +20,11 @@ import {
 } from '../lib/trackers';
 import { resolveColor } from '../lib/format';
 
+// A category and a list were the same thing — a container holding items — so
+// there's one option for both. Timer is separate because it isn't a container.
 const TYPE_OPTIONS = [
-  { value: 'timer', label: 'Timer', icon: '⏱' },
-  { value: 'list', label: 'List', icon: '☰' },
   { value: 'category', label: 'Category', icon: '🗂' },
+  { value: 'timer', label: 'Timer', icon: '⏱' },
 ];
 
 // Generic spread rather than fasting lengths — the goal is fully editable on

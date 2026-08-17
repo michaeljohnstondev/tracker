@@ -155,7 +155,6 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
         title={tracker.name}
         color={color}
         onBack={onBack}
-        onDelete={confirmDelete}
       />
 
       <KeyboardAvoidingView

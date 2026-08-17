@@ -4,14 +4,7 @@ import theme from '../theme/themes';
 
 // Detail-screen top bar: a back chevron, a centered title tinted with the
 // tracker's color, and optional share / trash actions on the right.
-export default function ScreenHeader({
-  title,
-  color,
-  onBack,
-  onRename,
-  onShare,
-  onDelete,
-}) {
+export default function ScreenHeader({ title, color, onBack, onRename, onMenu }) {
   return (
     <View style={styles.row}>
       <Pressable onPress={onBack} hitSlop={12} style={styles.side}>
@@ -30,17 +23,13 @@ export default function ScreenHeader({
         </Text>
         {onRename ? <Text style={styles.pencil}>✎</Text> : null}
       </Pressable>
-      {/* Reserve the right slot even with no actions so the title stays
-          optically centered against the back chevron. */}
+      {/* One menu rather than a row of icons — share, move and delete all live
+          behind it. The slot is reserved either way so the title stays
+          optically centred against the back chevron. */}
       <View style={styles.actions}>
-        {onShare ? (
-          <Pressable onPress={onShare} hitSlop={12} style={styles.action}>
-            <Text style={styles.shareIcon}>⤴</Text>
-          </Pressable>
-        ) : null}
-        {onDelete ? (
-          <Pressable onPress={onDelete} hitSlop={12} style={styles.action}>
-            <Text style={styles.icon}>🗑</Text>
+        {onMenu ? (
+          <Pressable onPress={onMenu} hitSlop={12} style={styles.action}>
+            <Text style={styles.menuIcon}>☰</Text>
           </Pressable>
         ) : null}
       </View>
@@ -76,12 +65,10 @@ const styles = StyleSheet.create({
   icon: {
     fontSize: 19,
   },
-  // The share arrow renders as thin monochrome text rather than a colour
-  // emoji, so it needs to be larger and tinted to sit level with the trash.
-  shareIcon: {
+  menuIcon: {
     color: theme.colors.textPrimary,
-    fontSize: 26,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 26,
   },
   back: {
     color: theme.colors.textPrimary,

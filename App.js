@@ -10,7 +10,6 @@ import HomeScreen from './src/screens/HomeScreen';
 import TimerDetailScreen from './src/screens/TimerDetailScreen';
 import ListDetailScreen from './src/screens/ListDetailScreen';
 import ItemDetailScreen from './src/screens/ItemDetailScreen';
-import CategoryDetailScreen from './src/screens/CategoryDetailScreen';
 import UpdateBanner from './src/components/ui/UpdateBanner';
 import { useAppUpdate } from './src/lib/useAppUpdate';
 
@@ -77,16 +76,8 @@ function Router() {
       return <ItemDetailScreen tracker={tracker} item={item} onBack={goBack} />;
     }
 
-    if (tracker.type === 'category') {
-      return (
-        <CategoryDetailScreen
-          tracker={tracker}
-          onBack={goBack}
-          onOpen={openTracker}
-        />
-      );
-    }
-
+    // Categories and lists are the same thing — a container of items — so
+    // both land on the same screen. Only timers differ.
     return tracker.type === 'timer' ? (
       <TimerDetailScreen
         tracker={tracker}
@@ -99,6 +90,7 @@ function Router() {
         onBack={goBack}
         onOpenItem={openItem}
         onOpenTracker={replaceTracker}
+        onOpenChild={openTracker}
       />
     );
   }

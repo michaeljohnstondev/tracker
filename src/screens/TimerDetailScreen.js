@@ -9,6 +9,7 @@ import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
 import RenameModal from '../components/RenameModal';
 import ShareListModal from '../components/ShareListModal';
+import TrackerMenu from '../components/TrackerMenu';
 import GoalModal from '../components/GoalModal';
 import { useTrackers } from '../store/TrackerContext';
 import { useAuth } from '../store/AuthContext';
@@ -41,6 +42,7 @@ export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
     useTrackers();
   const { uid } = useAuth();
   const [sharing, setSharing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // Setting a start time is two steps — date, then time — so that a fast
   // running longer than a day can still be corrected. null means closed.
   const [pickerStage, setPickerStage] = useState(null);
@@ -149,8 +151,7 @@ export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
         color={color}
         onBack={onBack}
         onRename={() => setRenaming(true)}
-        onShare={() => setSharing(true)}
-        onDelete={confirmDelete}
+        onMenu={() => setMenuOpen(true)}
       />
 
       {tracker.shared && (
@@ -299,6 +300,15 @@ export default function TimerDetailScreen({ tracker, onBack, onOpenTracker }) {
         initialHours={tracker.goalHours}
         onClose={() => setGoalOpen(false)}
         onSubmit={pickGoal}
+      />
+
+      <TrackerMenu
+        visible={menuOpen}
+        tracker={tracker}
+        onClose={() => setMenuOpen(false)}
+        onRename={() => setRenaming(true)}
+        onShare={() => setSharing(true)}
+        onDelete={confirmDelete}
       />
 
       <RenameModal

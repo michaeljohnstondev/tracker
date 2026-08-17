@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,18 +17,33 @@ import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
 import RenameModal from '../components/RenameModal';
 import ListItemRow from '../components/ListItemRow';
+import TrackerCard from '../components/TrackerCard';
+import AddTrackerModal from '../components/AddTrackerModal';
+import MoveTrackerModal from '../components/MoveTrackerModal';
+import TrackerMenu from '../components/TrackerMenu';
 import { useTrackers } from '../store/TrackerContext';
 import { resolveColor } from '../lib/format';
 
+/**
+ * A container: its items, and anything filed inside it.
+ *
+ * Categories and lists turned out to be the same thing — a container holding
+ * items — so there is one screen for both. The only difference left is whether
+ * a given container happens to have other containers inside it.
+ */
 export default function ListDetailScreen({
   tracker,
   onBack,
   onOpenItem,
   onOpenTracker,
+  onOpenChild,
 }) {
   // These operations dispatch to AsyncStorage or Firestore depending on
   // whether the list is shared — the screen doesn't need to know which.
   const {
+    trackers,
+    addTracker,
+    setTrackerParent,
     addItemTo,
     toggleItemIn,
     clearDoneIn,
@@ -38,6 +53,25 @@ export default function ListDetailScreen({
     deleteTracker,
   } = useTrackers();
   const [text, setText] = useState('');
+  const [addingChild, setAddingChild] = useState(false);
+  const [movingChild, setMovingChild] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Containers and timers filed inside this one.
+  const children = useMemo(
+    () => trackers.filter((t) => t.parentId === tracker.id),
+    [trackers, tracker.id]
+  );
+
+  const handleCreateChild = useCallback(
+    (created) => {
+      addTracker(created);
+      setTrackerParent(created.id, tracker.id);
+      setAddingChild(false);
+      onOpenChild?.(created.id);
+    },
+    [addTracker, setTrackerParent, tracker.id, onOpenChild]
+  );
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
 
@@ -110,8 +144,7 @@ export default function ListDetailScreen({
         color={color}
         onBack={onBack}
         onRename={() => setRenaming(true)}
-        onShare={() => setSharing(true)}
-        onDelete={confirmDelete}
+        onMenu={() => setMenuOpen(true)}
       />
 
       {tracker.shared && (
@@ -163,6 +196,29 @@ export default function ListDetailScreen({
           ListEmptyComponent={
             <Text style={styles.empty}>Nothing here yet.</Text>
           }
+          // Anything filed inside sits above the items. Not draggable — the
+          // reorderable list holds the items, and it can only hold one kind
+          // of thing. Ordering items matters more than ordering the handful
+          // of containers inside one.
+          ListHeaderComponent={
+            children.length > 0 ? (
+              <View style={styles.children}>
+                {children.map((child) => (
+                  <TrackerCard
+                    key={child.id}
+                    tracker={child}
+                    onPress={() => onOpenChild?.(child.id)}
+                    onHold={() => setMovingChild(child)}
+                  />
+                ))}
+              </View>
+            ) : null
+          }
+          ListFooterComponent={
+            <Pressable onPress={() => setAddingChild(true)} hitSlop={8}>
+              <Text style={styles.addChild}>+ Add a category or timer here</Text>
+            </Pressable>
+          }
         />
 
         {doneCount > 0 && (
@@ -187,6 +243,27 @@ export default function ListDetailScreen({
         initialParentId={tracker.parentId}
         onClose={() => setRenaming(false)}
         onSubmit={(name, parentId) => renameTracker(tracker, name, parentId)}
+      />
+
+      <AddTrackerModal
+        visible={addingChild}
+        onClose={() => setAddingChild(false)}
+        onCreate={handleCreateChild}
+      />
+
+      <MoveTrackerModal
+        visible={!!movingChild}
+        tracker={movingChild}
+        onClose={() => setMovingChild(null)}
+      />
+
+      <TrackerMenu
+        visible={menuOpen}
+        tracker={tracker}
+        onClose={() => setMenuOpen(false)}
+        onRename={() => setRenaming(true)}
+        onShare={() => setSharing(true)}
+        onDelete={confirmDelete}
       />
     </SafeAreaView>
   );
@@ -237,6 +314,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 60,
+    fontFamily: theme.fonts.main,
+  },
+  children: {
+    marginBottom: 6,
+  },
+  addChild: {
+    color: theme.colors.vibeBlue,
+    fontSize: 15,
+    fontWeight: '600',
+    paddingVertical: 14,
     fontFamily: theme.fonts.main,
   },
   item: {
