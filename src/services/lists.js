@@ -87,14 +87,6 @@ export function shareList(tracker, uid) {
   return { listId, settled: Promise.all(writes) };
 }
 
-/** Everyone currently on a list. Used to address reminder notifications. */
-export async function getMemberUids(listId) {
-  const snap = await getDocs(
-    query(collection(db, 'memberships'), where('listId', '==', listId))
-  );
-  return snap.docs.map((d) => snapData(d)?.uid).filter(Boolean);
-}
-
 /** Live view of every list this user belongs to. */
 export function subscribeToMyLists(uid, onChange, onError) {
   const q = query(collection(db, 'memberships'), where('uid', '==', uid));

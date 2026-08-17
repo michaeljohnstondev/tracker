@@ -5,7 +5,6 @@ import {
   setDoc,
 } from '@react-native-firebase/firestore';
 import { db } from './firebase';
-import { getMemberUids } from './lists';
 import { remindAt } from '../components/ItemReminders';
 
 // Pending reminders live in one flat collection, deliberately self-contained:
@@ -80,13 +79,13 @@ export async function syncItemReminders({
 
     if (!wanted.length) return;
 
-    // Everyone on a shared list gets told; a private tracker tells only its
-    // owner. Resolved now rather than at send time so the sweep stays a dumb
-    // dispatcher with no knowledge of lists.
-    const targetUids = tracker?.shared
-      ? await getMemberUids(tracker.remoteId)
-      : [uid];
-    if (!targetUids.length) return;
+    // Only ever the author here. Resolving a shared list's members would mean
+    // querying memberships by listId, and that query is denied — its read rule
+    // depends on fields the filter doesn't constrain, which Firestore refuses
+    // to allow. The sweep expands this to every current member at send time
+    // using the Admin SDK, which is both permitted and more correct, since
+    // membership can change after a reminder is set.
+    const targetUids = [uid];
 
     await Promise.all(
       wanted.map((offsetId) =>
