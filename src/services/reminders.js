@@ -61,7 +61,21 @@ export async function syncItemReminders({
   previous = [],
   reminders = [],
 }) {
-  if (!uid || !item?.id) return;
+  // Temporary instrumentation while diagnosing why no reminder doc appears.
+  console.log('[reminders] sync called', {
+    uid,
+    itemId: item?.id,
+    done: item?.done,
+    dueAt,
+    reminders,
+    previous,
+    shared: !!tracker?.shared,
+  });
+
+  if (!uid || !item?.id) {
+    console.log('[reminders] bailed: no uid or item id');
+    return;
+  }
 
   try {
     // A completed item shouldn't nag, and neither should one with no date.
@@ -78,7 +92,12 @@ export async function syncItemReminders({
       previous.filter((id) => !keep.has(id)).map((id) => deleteReminder(item.id, id))
     );
 
-    if (!wanted.length) return;
+    console.log('[reminders] wanted', wanted, 'now', Date.now());
+
+    if (!wanted.length) {
+      console.log('[reminders] bailed: nothing to schedule');
+      return;
+    }
 
     // Only ever the author here. Resolving a shared list's members would mean
     // querying memberships by listId, and that query is denied — its read rule
@@ -89,8 +108,9 @@ export async function syncItemReminders({
     const targetUids = [uid];
 
     await Promise.all(
-      wanted.map((offsetId) =>
-        setDoc(doc(remindersRef(), reminderId(item.id, offsetId)), {
+      wanted.map((offsetId) => {
+        console.log('[reminders] writing', reminderId(item.id, offsetId));
+        return setDoc(doc(remindersRef(), reminderId(item.id, offsetId)), {
           itemId: item.id,
           listId: tracker?.shared ? tracker.remoteId : null,
           trackerName: tracker?.name ?? '',
@@ -98,9 +118,11 @@ export async function syncItemReminders({
           targetUids,
           fireAt: remindAt(dueAt, offsetId),
           createdBy: uid,
-        })
-      )
+        });
+      })
     );
+
+    console.log('[reminders] wrote', wanted.length);
   } catch (err) {
     // Saving the item still succeeds, but the user is told. A reminder that
     // silently fails to schedule is worse than one that admits it — and
