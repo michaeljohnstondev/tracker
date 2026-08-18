@@ -143,6 +143,19 @@ export function NodeProvider({ children }) {
         // list while the lists themselves sat there intact.
         if (!healed.current) {
           healed.current = true;
+
+          // Trees you own but have no membership for get one back. Trees you
+          // own and can still see are written into the list, so anything made
+          // before this existed is covered from now on. Only your own — a
+          // list someone shared with you is theirs to recover.
+          memberships
+            .filter((m) => m.role === 'owner' && m.rootId)
+            .forEach((m) => {
+              remote
+                .rememberOwnTree(uid, m.rootId)
+                .catch((err) => reportRemote('remembering your lists', err));
+            });
+
           remote
             .findOwnedRootIds(uid)
             .then((owned) =>

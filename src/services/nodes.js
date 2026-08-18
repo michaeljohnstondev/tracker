@@ -1,6 +1,5 @@
 import {
   collection,
-  collectionGroup,
   doc,
   deleteDoc,
   getDoc,
@@ -105,6 +104,9 @@ export function shareSubtree({ node, descendants, uid }) {
       role: 'owner',
       joinedAt: Date.now(),
     }),
+    // Written at the same moment, so a tree is never remembered in only one
+    // place.
+    rememberOwnTree(uid, rootId),
     // Descendants keep their shape and their ids; only their home changes.
     ...descendants.map((child) =>
       setDoc(nodeDoc(rootId, child.id), {
@@ -140,25 +142,26 @@ export function publishInto({ node, descendants, parentId, rootId, uid }) {
   return Promise.all(writes);
 }
 
+const ownedTreesRef = (uid) => collection(db, 'users', uid, 'trees');
+
 /**
- * Every tree this user made, found without consulting memberships.
+ * A second record of which trees are yours, kept under your own account.
  *
- * Membership is a single point of failure: it's the only record of which trees
- * are yours, so losing those documents makes every shared list invisible while
- * the lists themselves sit there untouched. Ownership is recorded on the nodes
- * as well, which makes it recoverable — a collection-group read of everything
- * you created, reduced to the trees they belong to.
+ * Membership is otherwise a single point of failure: it's the only thing
+ * pointing at your shared lists, so losing those documents makes every one of
+ * them invisible while the lists themselves sit there untouched. Written
+ * alongside the membership, and read only when something has gone missing.
  */
-export async function findOwnedRootIds(uid) {
-  const snap = await getDocs(
-    query(collectionGroup(db, 'nodes'), where('ownerUid', '==', uid))
-  );
-  const roots = new Set();
-  snap.docs.forEach((d) => {
-    const { rootId } = snapData(d) || {};
-    if (rootId) roots.add(rootId);
+export function rememberOwnTree(uid, rootId) {
+  return setDoc(doc(ownedTreesRef(uid), rootId), {
+    rootId,
+    rememberedAt: Date.now(),
   });
-  return Array.from(roots);
+}
+
+export async function findOwnedRootIds(uid) {
+  const snap = await getDocs(ownedTreesRef(uid));
+  return snap.docs.map((d) => d.id);
 }
 
 /** Put back the membership for a tree you own. */

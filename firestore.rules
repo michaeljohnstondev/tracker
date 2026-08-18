@@ -89,6 +89,21 @@ service cloud.firestore {
       match /private/{docId} {
         allow read, write: if signedIn() && uid() == userId;
       }
+
+      // A list of the trees you made, so they can be found again when the
+      // membership pointing at them is gone.
+      //
+      // This replaces a collection-group read of nodes filtered on ownerUid,
+      // which could not be made to work: written as a plain field comparison
+      // it errored on any node predating that field — and an error denies the
+      // whole request, which made shared lists unreadable — while the guarded
+      // form that can't error is no longer something Firestore can prove
+      // against the query's own filter. A per-user list needs neither. It
+      // matches one path, reads nothing but its own documents, and has no way
+      // to fail.
+      match /trees/{treeId} {
+        allow read, write: if signedIn() && uid() == userId;
+      }
     }
 
     // The tree's root is in the path, so the rule reads it from there rather
@@ -118,10 +133,6 @@ service cloud.firestore {
     //
     // This grants nothing new: it returns only documents you created, and
     // rebuilding the membership still has to satisfy the rule below.
-    match /{path=**}/nodes/{nodeId} {
-      allow read: if signedIn() && resource.data.ownerUid == uid();
-    }
-
     match /memberships/{docId} {
       allow read: if signedIn()
         && (resource.data.uid == uid() || isMember(resource.data.rootId));
