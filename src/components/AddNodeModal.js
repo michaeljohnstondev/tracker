@@ -14,11 +14,18 @@ import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 export default function AddNodeModal({ visible, onClose, onCreate }) {
   const [name, setName] = useState('');
   const [color, setColor] = useState(NODE_COLORS[0]);
+  // Not types — just a head start. Everything here can be added or removed
+  // afterwards on the thing itself, but a fresh node advertises none of it,
+  // so without these the app looks like it does less than it does.
+  const [withTimer, setWithTimer] = useState(false);
+  const [repeat, setRepeat] = useState(null);
   const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
     setName('');
     setColor(NODE_COLORS[0]);
+    setWithTimer(false);
+    setRepeat(null);
   };
 
   const handleClose = () => {
@@ -29,7 +36,12 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
   const handleCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onCreate({ name: trimmed, color });
+    onCreate({
+      name: trimmed,
+      color,
+      ...(withTimer ? { goalHours: 1 } : null),
+      ...(repeat ? { repeat } : null),
+    });
     reset();
   };
 
@@ -54,6 +66,35 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
               onSubmitEditing={handleCreate}
               returnKeyType="done"
             />
+
+            <Text style={styles.label}>Start it with</Text>
+            <Text style={styles.hint}>
+              Optional — everything can be added later. Anything can hold other
+              things inside it, so a list is just something you put things in.
+            </Text>
+            <View style={styles.chips}>
+              <VibeButton
+                label="⏱ Timer"
+                variant="toggle"
+                color={withTimer ? 'green' : 'gray'}
+                onPress={() => setWithTimer((v) => !v)}
+                style={styles.chip}
+              />
+              <VibeButton
+                label="🔁 Daily"
+                variant="toggle"
+                color={repeat === 'daily' ? 'green' : 'gray'}
+                onPress={() => setRepeat((r) => (r === 'daily' ? null : 'daily'))}
+                style={styles.chip}
+              />
+              <VibeButton
+                label="🔁 Weekly"
+                variant="toggle"
+                color={repeat === 'weekly' ? 'green' : 'gray'}
+                onPress={() => setRepeat((r) => (r === 'weekly' ? null : 'weekly'))}
+                style={styles.chip}
+              />
+            </View>
 
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
@@ -116,6 +157,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontFamily: theme.fonts.main,
   },
+  hint: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 10,
+    marginTop: -4,
+    fontFamily: theme.fonts.main,
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { paddingVertical: 8, paddingHorizontal: 14 },
   colors: { flexDirection: 'row', gap: 12 },
   swatch: {
     width: 38,
