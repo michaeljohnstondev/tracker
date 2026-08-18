@@ -12,35 +12,32 @@ import theme from '../theme/themes';
 import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
-import { useTrackers } from '../store/TrackerContext';
-import { createInvite } from '../services/lists';
+import { useNodes } from '../store/NodeContext';
+import { createInvite } from '../services/nodes';
 import { ensurePushPermission } from '../services/fcm';
 
-// Three states in one sheet, because they're really one flow: sign in ->
-// publish the list -> hand someone a code. Showing them as separate screens
-// would make a two-tap job feel like a setup wizard.
-export default function ShareListModal({ visible, tracker, onClose }) {
+// Sign in, publish, hand over a code — one flow, one sheet. Splitting them
+// into separate screens would make a two-tap job feel like a setup wizard.
+export default function ShareNodeModal({ visible, node, onClose }) {
   const { user, signIn, busy } = useAuth();
-  const { shareTracker } = useTrackers();
+  const { shareNode } = useNodes();
 
   const [working, setWorking] = useState(false);
   const [code, setCode] = useState(null);
-  // Set once this sheet publishes the list. The `tracker` prop still points at
-  // the local copy at that moment — the shared one only exists after the
-  // subscription delivers it — so the sheet tracks the new id itself rather
-  // than waiting for a prop that would arrive a render or two later.
-  const [publishedId, setPublishedId] = useState(null);
+  // Set once this sheet publishes. The `node` prop still points at the local
+  // copy at that moment — the shared one only exists once the subscription
+  // delivers it — so the sheet tracks the new id itself.
+  const [publishedRoot, setPublishedRoot] = useState(null);
 
-  // A code belongs to one sharing session; don't leak it across opens.
   useEffect(() => {
     if (!visible) {
       setCode(null);
-      setPublishedId(null);
+      setPublishedRoot(null);
     }
   }, [visible]);
 
-  const isShared = !!tracker?.shared || !!publishedId;
-  const remoteId = tracker?.remoteId ?? publishedId;
+  const isShared = !!node?.shared || !!publishedRoot;
+  const rootId = node?.rootId ?? publishedRoot;
 
   const handleSignIn = useCallback(async () => {
     try {
@@ -54,24 +51,24 @@ export default function ShareListModal({ visible, tracker, onClose }) {
     try {
       // Returns immediately — the writes go to Firestore's queue rather than
       // being awaited, so this works offline and can't hang the sheet.
-      const { remoteId: newId } = shareTracker(tracker);
-      setPublishedId(newId);
-      // A justified moment to ask: from here on, someone else can change this
-      // list, which is precisely what a notification would tell you about.
+      const { rootId: newRoot } = shareNode(node);
+      setPublishedRoot(newRoot);
+      // A justified moment to ask: from here on someone else can change this,
+      // which is exactly what a notification would tell you about.
       ensurePushPermission(user?.uid);
     } catch (e) {
       VibeAlert('Could not share', e?.message ?? 'Please try again.');
     }
-  }, [shareTracker, tracker, user]);
+  }, [shareNode, node, user]);
 
   const handleInvite = useCallback(async () => {
     setWorking(true);
     try {
-      const generated = await createInvite(remoteId, user.uid);
+      const generated = await createInvite(rootId, user.uid);
       setCode(generated);
       await Share.share({
         message:
-          `Join my "${tracker.name}" on Tracker.\n\n` +
+          `Join my "${node.name}" on Tracker.\n\n` +
           `Invite code: ${generated}\n\n` +
           `Open Tracker, tap "Join with code" and enter it.`,
       });
@@ -80,33 +77,29 @@ export default function ShareListModal({ visible, tracker, onClose }) {
     } finally {
       setWorking(false);
     }
-  }, [tracker, remoteId, user]);
+  }, [node, rootId, user]);
 
-  // Hand the newly-published id back on the way out, so the screen underneath
-  // can switch to the shared list and drop the local copy — after this sheet
-  // is gone, never while it's on screen.
+  // Hand the new root back on the way out, so the screen underneath can swap
+  // to the shared copy and drop the local one — after this sheet has gone,
+  // never while it's on screen. Unmounting a visible modal leaves a black
+  // window on Android.
   const handleClose = useCallback(() => {
-    onClose(publishedId ? { publishedId, localId: tracker?.id } : null);
-  }, [onClose, publishedId, tracker]);
+    onClose(publishedRoot ? { rootId: publishedRoot, localId: node?.id } : null);
+  }, [onClose, publishedRoot, node]);
 
   const spinner = working || busy;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <Pressable style={styles.overlay} onPress={handleClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>Share “{tracker?.name}”</Text>
+          <Text style={styles.title}>Share “{node?.name}”</Text>
 
           {!user && (
             <>
               <Text style={styles.body}>
-                Sharing needs an account so the list can sync between phones.
-                Your existing trackers stay on this device either way.
+                Sharing needs an account so this can sync between phones.
+                Everything else stays on your device either way.
               </Text>
               <View style={styles.actions}>
                 <VibeButton
@@ -122,12 +115,13 @@ export default function ShareListModal({ visible, tracker, onClose }) {
           {user && !isShared && (
             <>
               <Text style={styles.body}>
-                This tracker lives only on this phone. Sharing uploads it so
-                someone else can see and edit it in real time.
+                This lives only on this phone. Sharing uploads it — and
+                everything inside it — so someone else can see and edit it in
+                real time.
               </Text>
               <View style={styles.actions}>
                 <VibeButton
-                  label="Share this tracker"
+                  label="Share this"
                   variant="green"
                   onPress={handlePublish}
                   disabled={spinner}
@@ -141,7 +135,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
               <Text style={styles.body}>
                 {code
                   ? 'Give them this code — it works once they enter it in Tracker.'
-                  : 'This tracker is shared. Create a code to invite someone.'}
+                  : 'This is shared. Create a code to invite someone.'}
               </Text>
 
               {code && <Text style={styles.code}>{code}</Text>}
@@ -158,10 +152,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
           )}
 
           {spinner && (
-            <ActivityIndicator
-              color={theme.colors.vibeCyan}
-              style={styles.spinner}
-            />
+            <ActivityIndicator color={theme.colors.vibeCyan} style={styles.spinner} />
           )}
 
           <Pressable onPress={handleClose} hitSlop={8}>
@@ -174,11 +165,7 @@ export default function ShareListModal({ visible, tracker, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.colors.background,
     borderTopLeftRadius: 24,
@@ -212,13 +199,8 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontFamily: theme.fonts.main,
   },
-  actions: {
-    marginTop: 22,
-    alignItems: 'stretch',
-  },
-  spinner: {
-    marginTop: 14,
-  },
+  actions: { marginTop: 22, alignItems: 'stretch' },
+  spinner: { marginTop: 14 },
   cancel: {
     color: theme.colors.textSecondary,
     fontSize: 15,

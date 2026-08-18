@@ -5,120 +5,78 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import theme from './src/theme/themes';
 import { AuthProvider } from './src/store/AuthContext';
-import { TrackerProvider, useTrackers } from './src/store/TrackerContext';
-import HomeScreen from './src/screens/HomeScreen';
-import TimerDetailScreen from './src/screens/TimerDetailScreen';
-import ListDetailScreen from './src/screens/ListDetailScreen';
-import ItemDetailScreen from './src/screens/ItemDetailScreen';
+import { NodeProvider, useNodes } from './src/store/NodeContext';
+import NodeScreen from './src/screens/NodeScreen';
 import UpdateBanner from './src/components/ui/UpdateBanner';
 import { useAppUpdate } from './src/lib/useAppUpdate';
 
-// In-app router holding a real stack of tracker ids, because categories can
-// contain categories to any depth — so "one level up" isn't a fixed
-// destination any more. Still no navigation library: a stack of ids and an
-// optional open item is the whole model.
+/**
+ * A stack of node ids. Home is the empty stack — the children of an invisible
+ * root — so the top level isn't a special case, it's the same screen with
+ * nothing on the stack.
+ */
 function Router() {
-  const { getTracker } = useTrackers();
+  const { getNode } = useNodes();
   const [stack, setStack] = useState([]);
-  const [itemId, setItemId] = useState(null);
 
-  const openTracker = useCallback((id) => {
-    setItemId(null);
-    setStack((s) => [...s, id]);
-  }, []);
-
-  const openItem = useCallback((trackerId, id) => setItemId(id), []);
-
-  const goHome = useCallback(() => {
-    setItemId(null);
-    setStack([]);
-  }, []);
-
-  // One step up: out of an item first, then out of each nested category.
-  const goBack = useCallback(() => {
-    setItemId((currentItem) => {
-      if (currentItem) return null;
-      setStack((s) => s.slice(0, -1));
-      return null;
-    });
-  }, []);
+  const open = useCallback((id) => setStack((s) => [...s, id]), []);
+  const goBack = useCallback(() => setStack((s) => s.slice(0, -1)), []);
 
   // Replaces the current screen rather than stacking onto it — used when a
-  // tracker is shared and the local copy is swapped for the remote one, where
-  // pushing would leave a dead entry behind.
-  const replaceTracker = useCallback((id) => {
-    setItemId(null);
-    setStack((s) => (s.length ? [...s.slice(0, -1), id] : [id]));
-  }, []);
+  // node is shared and the local copy is swapped for its published twin,
+  // where pushing would leave a dead entry behind.
+  const replace = useCallback(
+    (id) => setStack((s) => (s.length ? [...s.slice(0, -1), id] : [id])),
+    []
+  );
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (itemId || stack.length) {
-        goBack();
-        return true;
-      }
-      return false;
+      if (!stack.length) return false;
+      goBack();
+      return true;
     });
     return () => sub.remove();
-  }, [itemId, stack.length, goBack]);
+  }, [stack.length, goBack]);
 
-  const tracker = stack.length ? getTracker(stack[stack.length - 1]) : null;
+  const node = stack.length ? getNode(stack[stack.length - 1]) : null;
 
-  // The tracker can vanish under us — deleted here, or removed by someone
-  // else on a shared list. Drop back rather than render nothing.
-  if (stack.length && !tracker) {
-    return <HomeScreen onOpen={openTracker} />;
+  // The node can vanish under us — deleted here, or removed by someone else on
+  // a shared tree. Drop back rather than render nothing.
+  if (stack.length && !node) {
+    return <NodeScreen node={null} onOpen={open} onBack={goBack} onReplace={replace} />;
   }
 
-  if (tracker) {
-    const item = itemId ? tracker.items?.find((i) => i.id === itemId) : null;
-    if (itemId && item) {
-      return <ItemDetailScreen tracker={tracker} item={item} onBack={goBack} />;
-    }
-
-    // Categories and lists are the same thing — a container of items — so
-    // both land on the same screen. Only timers differ.
-    return tracker.type === 'timer' ? (
-      <TimerDetailScreen
-        tracker={tracker}
-        onBack={goBack}
-        onOpenTracker={replaceTracker}
-      />
-    ) : (
-      <ListDetailScreen
-        tracker={tracker}
-        onBack={goBack}
-        onOpenItem={openItem}
-        onOpenTracker={replaceTracker}
-        onOpenChild={openTracker}
-      />
-    );
-  }
-
-  return <HomeScreen onOpen={openTracker} />;
+  return (
+    <NodeScreen
+      key={node?.id ?? 'root'}
+      node={node}
+      onOpen={open}
+      onBack={goBack}
+      onReplace={replace}
+    />
+  );
 }
 
 export default function App() {
-  // Sits outside the providers: an update prompt shouldn't depend on auth or
-  // tracker state having loaded, and it must still appear if either fails.
+  // Outside the providers: an update prompt shouldn't be gated on auth or
+  // data having loaded, and should still appear if either fails.
   const { isUpdateReady, applyUpdate } = useAppUpdate();
 
   return (
-    // Required by react-native-gesture-handler, which powers drag-to-reorder.
-    // Must sit above everything that uses a gesture.
+    // Required by react-native-gesture-handler, which powers dragging.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-          {/* Auth wraps trackers: the tracker store subscribes to shared
-              lists keyed on the signed-in uid, so it has to read auth. */}
+          {/* Auth wraps nodes: the store subscribes to shared trees keyed on
+              the signed-in uid, so it has to read auth state. */}
           <AuthProvider>
-            <TrackerProvider>
+            <NodeProvider>
               <Router />
-            </TrackerProvider>
+            </NodeProvider>
           </AuthProvider>
-          {/* Last child so it floats above the screens rather than being
-              covered by them. */}
+          {/* Last child so it floats above the screen rather than under it. */}
           <UpdateBanner visible={isUpdateReady} onRestart={applyUpdate} />
         </View>
       </SafeAreaProvider>

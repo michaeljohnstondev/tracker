@@ -13,7 +13,7 @@ import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
-import { redeemInvite } from '../services/lists';
+import { redeemInvite } from '../services/nodes';
 import { ensurePushPermission } from '../services/fcm';
 
 // Redeem an invite code. On success the list arrives on its own via the

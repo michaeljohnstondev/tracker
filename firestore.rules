@@ -2,21 +2,27 @@ rules_version = '2';
 
 // Data model
 // ----------
-// users/{uid}                      profile shown to co-members of a list
-// lists/{listId}                   name, color, ownerUid
-// lists/{listId}/items/{itemId}    one doc per item, so concurrent edits merge
-// memberships/{listId}_{uid}       one doc per person per list
-// invites/{code}                   short random code -> listId
+// users/{uid}                 profile shown to people you share with
+// users/{uid}/private/push    FCM token — nobody else's business
+// nodes/{nodeId}              a shared node, carrying rootId
+// memberships/{rootId}_{uid}  one doc per person per shared tree
+// invites/{code}              short random code -> rootId
+// reminders/{id}              a pending alarm, self-contained
 //
-// Membership is its own collection rather than an array on the list, because
-// a joiner cannot read the list before they belong to it — so they could
-// never compute "existing members + me" to write back. Here they simply
-// create their *own* membership doc, and the rules verify the invite code
-// server-side. It also means no reliance on arrayUnion resolving inside
-// rules, and "which lists are mine" becomes a plain indexed query.
+// Everything in the app is a node, and sharing attaches to a node and takes
+// its subtree with it. Each shared node stores `rootId` — the node that was
+// actually shared — so "may this person read this node" is a single
+// membership lookup. Rules cannot walk an ancestor chain of unknown length,
+// which is exactly why that field is denormalised onto every node.
 //
-// Everything works on the free Spark plan: no Cloud Functions involved.
-// Knowing an invite code is the entire authorization to join.
+// Membership is its own collection rather than an array on the root, because a
+// joiner cannot read the root before they belong to it, and so could never
+// compute "existing members plus me" to write back. They create their own
+// membership row and the rules re-check the invite code server-side. Knowing
+// a code is the entire authorization to join.
+//
+// No Cloud Functions are needed for any of this: it all works on the free
+// Spark plan.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -29,86 +35,84 @@ service cloud.firestore {
       return request.auth.uid;
     }
 
-    function membershipId(listId) {
-      return listId + '_' + uid();
+    function membershipId(rootId) {
+      return rootId + '_' + uid();
     }
 
-    function isMember(listId) {
+    function isMember(rootId) {
       return signedIn()
-        && exists(/databases/$(database)/documents/memberships/$(membershipId(listId)));
+        && exists(/databases/$(database)/documents/memberships/$(membershipId(rootId)));
     }
 
-    function ownsList(listId) {
+    function ownsTree(rootId) {
       return signedIn()
-        && get(/databases/$(database)/documents/lists/$(listId)).data.ownerUid == uid();
+        && get(/databases/$(database)/documents/nodes/$(rootId)).data.ownerUid == uid();
     }
 
-    // An invite code is the shared secret. Holding one that points at this
-    // list is what authorizes joining it.
-    function inviteGrants(listId, code) {
+    // An invite code is the shared secret; holding one that points at this
+    // tree is what authorizes joining it.
+    function inviteGrants(rootId, code) {
       return exists(/databases/$(database)/documents/invites/$(code))
-        && get(/databases/$(database)/documents/invites/$(code)).data.listId == listId;
+        && get(/databases/$(database)/documents/invites/$(code)).data.rootId == rootId;
     }
 
-    // Readable by any signed-in user so a list can show who ticked an item
-    // off; writable only by the person it describes.
+    // Readable by any signed-in user so a shared tree can show who ticked
+    // something off; writable only by the person it describes.
     match /users/{userId} {
       allow read: if signedIn();
       allow write: if signedIn() && uid() == userId;
 
-      // Push tokens and anything else that co-members have no business
-      // reading. Subcollections don't inherit the rule above, so this has to
-      // be stated separately. Cloud Functions use the Admin SDK and bypass
-      // rules entirely, so they can still read tokens to send notifications.
+      // Push tokens. Subcollections don't inherit the rule above, so this has
+      // to be stated separately. Cloud Functions use the Admin SDK and bypass
+      // rules, so they can still read tokens in order to send.
       match /private/{docId} {
         allow read, write: if signedIn() && uid() == userId;
       }
     }
 
-    match /lists/{listId} {
-      allow read: if isMember(listId);
-      allow create: if signedIn() && request.resource.data.ownerUid == uid();
-      allow update: if isMember(listId) && request.resource.data.ownerUid == resource.data.ownerUid;
-      allow delete: if signedIn() && resource.data.ownerUid == uid();
+    match /nodes/{nodeId} {
+      // Membership in the tree this node belongs to is the whole check —
+      // one lookup, whatever the depth.
+      allow read, update, delete: if isMember(resource.data.rootId);
 
-      match /items/{itemId} {
-        allow read, write: if isMember(listId);
-      }
+      // Creating the root of a new shared tree, or adding to one you're in.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == uid()
+        && (request.resource.data.rootId == nodeId
+            || isMember(request.resource.data.rootId));
     }
 
     match /memberships/{docId} {
-      // Members may read their own row, and read rows of lists they belong to
-      // (so the app can show who else is on a list).
       allow read: if signedIn()
-        && (resource.data.uid == uid() || isMember(resource.data.listId));
+        && (resource.data.uid == uid() || isMember(resource.data.rootId));
 
       // You may only ever create your own membership, at the canonical id, and
-      // only if you either own the list or hold a valid invite to it.
+      // only if you own the tree or hold a valid invite to it.
       allow create: if signedIn()
         && request.resource.data.uid == uid()
-        && docId == membershipId(request.resource.data.listId)
-        && (ownsList(request.resource.data.listId)
-            || inviteGrants(request.resource.data.listId, request.resource.data.usedInviteCode)
-            // Someone shared this list directly with me. The share doc uses
-            // the same {listId}_{uid} key, so it's checkable by path without
-            // a query.
-            || exists(/databases/$(database)/documents/shares/$(docId)));
+        && docId == membershipId(request.resource.data.rootId)
+        && (ownsTree(request.resource.data.rootId)
+            || inviteGrants(request.resource.data.rootId, request.resource.data.usedInviteCode));
 
-      // Leaving a list is deleting your own row. The owner may also remove
-      // someone else's.
+      // Leaving is deleting your own row; an owner may also remove someone.
       allow delete: if signedIn()
-        && (resource.data.uid == uid() || ownsList(resource.data.listId));
+        && (resource.data.uid == uid() || ownsTree(resource.data.rootId));
     }
 
-    // A pending reminder. Self-contained on purpose: it carries its own copy
-    // of the text and the people to notify, so the sweep never has to read the
-    // item — which is what lets reminders work on device-local trackers that
-    // were never uploaded.
+    // Codes are random and unguessable; reading one reveals only a rootId,
+    // which is useless on its own since joining still creates a membership
+    // that gets re-checked above.
+    match /invites/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isMember(request.resource.data.rootId);
+      allow delete: if signedIn() && isMember(resource.data.rootId);
+    }
+
+    // A pending alarm. Self-contained on purpose: it carries its own copy of
+    // the text and the people to notify, so the sweep never reads the node it
+    // came from — which is what lets an alarm work on a device-local node that
+    // was never uploaded.
     match /reminders/{docId} {
-      // targetUids holds only the author — a client can't resolve a shared
-      // list's members without a query the rules can't permit. Anyone on the
-      // list may still adjust the reminder, checked per document rather than
-      // by query, which rules can evaluate.
       allow read, update, delete: if signedIn()
         && (uid() in resource.data.targetUids
             || (resource.data.listId != null && isMember(resource.data.listId)));
@@ -116,38 +120,6 @@ service cloud.firestore {
       allow create: if signedIn()
         && uid() in request.resource.data.targetUids
         && request.resource.data.fireAt is number;
-    }
-
-    // Private backup of a user's own trackers. Nobody else can see these —
-    // sharing a list is a separate, deliberate act.
-    match /users/{userId}/trackers/{trackerId} {
-      allow read, write: if signedIn() && uid() == userId;
-    }
-
-    // A list aimed at one specific person, rather than a code handed out to
-    // whoever. Keyed {listId}_{toUid} so the membership rule above can check
-    // for it by path. Consumed and deleted by the recipient once they join.
-    match /shares/{docId} {
-      allow read: if signedIn()
-        && (resource.data.toUid == uid() || resource.data.fromUid == uid());
-
-      allow create: if signedIn()
-        && request.resource.data.fromUid == uid()
-        && docId == request.resource.data.listId + '_' + request.resource.data.toUid
-        && isMember(request.resource.data.listId);
-
-      // The recipient clears it on joining; the sender can withdraw it.
-      allow delete: if signedIn()
-        && (resource.data.toUid == uid() || resource.data.fromUid == uid());
-    }
-
-    // Codes are random and unguessable; reading one reveals only a listId,
-    // which is useless on its own — joining still creates a membership that
-    // gets re-checked above.
-    match /invites/{code} {
-      allow read: if signedIn();
-      allow create: if signedIn() && isMember(request.resource.data.listId);
-      allow delete: if signedIn() && isMember(resource.data.listId);
     }
   }
 }

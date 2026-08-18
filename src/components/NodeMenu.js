@@ -1,75 +1,66 @@
 import React, { useMemo, useState } from 'react';
 import { Modal, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import theme from '../theme/themes';
-import { useTrackers } from '../store/TrackerContext';
+import { useNodes } from '../store/NodeContext';
+import { filingTargets } from '../lib/nodes';
 
-// Everything you can do to a tracker, in one sheet off the header.
-//
-// Moving is expressed relatively — out one level, or into one of the
-// containers sitting alongside it — rather than as a picker listing every
-// category in the app. Relative moves are the ones you actually want, and they
-// stay short no matter how big the tree gets. Options that can't apply simply
-// aren't shown: nothing to move out of, no siblings to move into, no menu
-// entry.
-export default function TrackerMenu({
-  visible,
-  tracker,
-  onClose,
-  onRename,
-  onShare,
-  onDelete,
-}) {
-  const { trackers, setTrackerParent } = useTrackers();
+/**
+ * Everything you can do to a node, in one sheet off the header.
+ *
+ * Moving is relative — out to where its parent lives, or into something
+ * sitting alongside it — rather than a picker listing every node in the app.
+ * Those are the moves you actually want, and the menu stays short however
+ * large the tree grows. Anything that can't apply isn't shown at all.
+ */
+export default function NodeMenu({ visible, node, onClose, onRename, onShare, onDelete }) {
+  const { nodes, moveNode } = useNodes();
   const [choosing, setChoosing] = useState(false);
 
   const parent = useMemo(
-    () => trackers.find((t) => t.id === tracker?.parentId) ?? null,
-    [trackers, tracker]
+    () => nodes.find((n) => n.id === node?.parentId) ?? null,
+    [nodes, node]
   );
 
-  // Containers at the same level, which this could be moved into.
-  const siblings = useMemo(
-    () =>
-      trackers.filter(
-        (t) =>
-          t.id !== tracker?.id &&
-          t.type !== 'timer' &&
-          (t.parentId ?? null) === (tracker?.parentId ?? null)
-      ),
-    [trackers, tracker]
-  );
+  // Legal destinations that sit alongside this node.
+  const siblings = useMemo(() => {
+    if (!node) return [];
+    const legal = new Set(filingTargets(nodes, node).map((n) => n.id));
+    return nodes.filter(
+      (n) => legal.has(n.id) && (n.parentId ?? null) === (node.parentId ?? null)
+    );
+  }, [nodes, node]);
 
   const close = () => {
     setChoosing(false);
     onClose();
   };
 
-  const moveOut = () => {
-    setTrackerParent(tracker.id, parent?.parentId ?? null);
-    close();
+  const run = (fn) => {
+    onClose();
+    fn?.();
   };
-
-  const moveInto = (target) => {
-    setTrackerParent(tracker.id, target.id);
-    close();
-  };
-
-  const isContainer = tracker?.type !== 'timer';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <Pressable style={styles.overlay} onPress={close}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title} numberOfLines={1}>
-            {tracker?.name}
+            {node?.name}
           </Text>
 
           {choosing ? (
             <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.hint}>Move into…</Text>
               {siblings.map((s) => (
-                <Pressable key={s.id} onPress={() => moveInto(s)} style={styles.row}>
-                  <Text style={styles.rowIcon}>🗂</Text>
+                <Pressable
+                  key={s.id}
+                  onPress={() => {
+                    moveNode(node, s.id);
+                    close();
+                  }}
+                  style={styles.row}
+                >
+                  <Text style={styles.rowIcon}>{s.shared ? '👥' : '🗂'}</Text>
                   <Text style={styles.rowLabel} numberOfLines={1}>
                     {s.name}
                   </Text>
@@ -78,21 +69,28 @@ export default function TrackerMenu({
             </ScrollView>
           ) : (
             <>
-              <Pressable onPress={() => { onClose(); onRename?.(); }} style={styles.row}>
+              <Pressable onPress={() => run(onRename)} style={styles.row}>
                 <Text style={styles.rowIcon}>✎</Text>
                 <Text style={styles.rowLabel}>Edit title</Text>
               </Pressable>
 
-              {isContainer && onShare && (
-                <Pressable onPress={() => { onClose(); onShare(); }} style={styles.row}>
+              {onShare && (
+                <Pressable onPress={() => run(onShare)} style={styles.row}>
                   <Text style={styles.rowIcon}>⤴</Text>
-                  <Text style={styles.rowLabel}>Share</Text>
+                  <Text style={styles.rowLabel}>
+                    {node?.shared ? 'Invite someone' : 'Share'}
+                  </Text>
                 </Pressable>
               )}
 
-              {/* Only when there's somewhere to come out to. */}
-              {tracker?.parentId && (
-                <Pressable onPress={moveOut} style={styles.row}>
+              {node?.parentId && (
+                <Pressable
+                  onPress={() => {
+                    moveNode(node, parent?.parentId ?? null);
+                    close();
+                  }}
+                  style={styles.row}
+                >
                   <Text style={styles.rowIcon}>↑</Text>
                   <Text style={styles.rowLabel}>
                     {parent?.parentId ? 'Move up a level' : 'Move to home'}
@@ -100,7 +98,6 @@ export default function TrackerMenu({
                 </Pressable>
               )}
 
-              {/* Only when there's something alongside to go into. */}
               {siblings.length > 0 && (
                 <Pressable onPress={() => setChoosing(true)} style={styles.row}>
                   <Text style={styles.rowIcon}>↓</Text>
@@ -108,7 +105,7 @@ export default function TrackerMenu({
                 </Pressable>
               )}
 
-              <Pressable onPress={() => { onClose(); onDelete?.(); }} style={styles.row}>
+              <Pressable onPress={() => run(onDelete)} style={styles.row}>
                 <Text style={styles.rowIcon}>🗑</Text>
                 <Text style={[styles.rowLabel, styles.destructive]}>Delete</Text>
               </Pressable>
@@ -125,11 +122,7 @@ export default function TrackerMenu({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.colors.background,
     borderTopLeftRadius: 24,
@@ -164,20 +157,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.inputBorder,
   },
-  rowIcon: {
-    fontSize: 17,
-    width: 32,
-    color: theme.colors.textPrimary,
-  },
+  rowIcon: { fontSize: 17, width: 32, color: theme.colors.textPrimary },
   rowLabel: {
     flex: 1,
     color: theme.colors.textPrimary,
     fontSize: 16,
     fontFamily: theme.fonts.main,
   },
-  destructive: {
-    color: theme.colors.vibeRed,
-  },
+  destructive: { color: theme.colors.vibeRed },
   cancel: {
     color: theme.colors.textSecondary,
     fontSize: 15,

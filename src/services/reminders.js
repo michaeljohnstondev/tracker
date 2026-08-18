@@ -76,6 +76,51 @@ export async function syncGoalReminder({
 }
 
 /**
+ * Alarms for a node, in the unified model.
+ *
+ * `previous` is what the node last had stored — the only record of which
+ * documents exist, which is what lets this reconcile without a query. Queries
+ * here are denied anyway: the read rule requires the caller to be in
+ * targetUids, and Firestore rejects any query it can't prove satisfies the
+ * rule from the query's own filters.
+ */
+export async function syncNodeReminders({ node, uid, previous = [], reminders = [] }) {
+  if (!uid || !node?.id) return;
+
+  try {
+    const wanted = node.done ? [] : reminders.filter((at) => at > Date.now());
+    const keep = new Set(wanted);
+
+    await Promise.all(
+      previous.filter((at) => !keep.has(at)).map((at) => deleteReminder(node.id, at))
+    );
+
+    if (!wanted.length) return;
+
+    await Promise.all(
+      wanted.map((at) =>
+        setDoc(doc(remindersRef(), reminderId(node.id, at)), {
+          itemId: node.id,
+          // Shared nodes address the whole tree, so everyone on it is told.
+          listId: node.shared ? node.rootId : null,
+          trackerName: node.name ?? '',
+          itemText: node.name ?? '',
+          targetUids: [uid],
+          fireAt: at,
+          createdBy: uid,
+        })
+      )
+    );
+  } catch (err) {
+    console.error('[reminders] node sync FAILED:', err?.message || err);
+    VibeAlert(
+      'Reminder not scheduled',
+      `Saved, but the reminder could not be stored.\n\n${err?.message || err}`
+    );
+  }
+}
+
+/**
  * Remove pending alarms for an item — deleted, completed, or cleared.
  * `times` is what the item last had stored, the only record of what exists.
  */
