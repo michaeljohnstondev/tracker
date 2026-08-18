@@ -186,6 +186,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   // ---- Actions ------------------------------------------------------------
 
   const confirmDelete = useCallback(() => {
+    // The sheets outlive the node now, so nothing here may assume one.
+    if (!node) return;
     const count = children.length;
     const leaving = node.shared && !node.isRoot;
     VibeAlert(
@@ -473,47 +475,50 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 
       <JoinListModal visible={joining} onClose={() => setJoining(false)} />
 
-      {!isRoot && (
-        <>
-          <AddDetailModal
-            visible={addingDetail}
-            node={node}
-            onClose={() => setAddingDetail(false)}
-            onPick={addDetail}
-          />
+      {/* Mounted unconditionally, and visible only by their own flags.
+          Wrapping these in a check on the node meant that the instant the node
+          went — which is precisely what sharing does to the local copy once
+          the upload is confirmed — a visible sheet was unmounted underneath
+          the user. On Android each Modal is its own window, and tearing one
+          down while it is on screen takes the app with it. */}
+      <AddDetailModal
+        visible={addingDetail}
+        node={node}
+        onClose={() => setAddingDetail(false)}
+        onPick={addDetail}
+      />
 
-          <ShareNodeModal
-            visible={sharing}
-            node={node}
-            onPublished={setPendingRoot}
-            onClose={handleShareClose}
-          />
+      <ShareNodeModal
+        visible={sharing}
+        node={node}
+        onPublished={setPendingRoot}
+        onClose={handleShareClose}
+      />
 
-          <NodeMenu
-            visible={menuOpen}
-            node={node}
-            onClose={() => setMenuOpen(false)}
-            onRename={() => setRenaming(true)}
-            onShare={() => setSharing(true)}
-            onDelete={confirmDelete}
-          />
+      <NodeMenu
+        visible={menuOpen}
+        node={node}
+        onClose={() => setMenuOpen(false)}
+        onRename={() => setRenaming(true)}
+        onShare={() => setSharing(true)}
+        onDelete={confirmDelete}
+      />
 
-          <RenameModal
-            visible={renaming}
-            tracker={node}
-            initialName={node.name}
-            onClose={() => setRenaming(false)}
-            onSubmit={(name) => updateNode(node, { name: name.trim() || node.name })}
-          />
+      <RenameModal
+        visible={renaming}
+        initialName={node?.name ?? ''}
+        onClose={() => setRenaming(false)}
+        onSubmit={(name) =>
+          node && updateNode(node, { name: name.trim() || node.name })
+        }
+      />
 
-          <GoalModal
-            visible={goalOpen}
-            initialHours={node.goalHours}
-            onClose={() => setGoalOpen(false)}
-            onSubmit={(hours) => applyTimer({ goalHours: hours })}
-          />
-        </>
-      )}
+      <GoalModal
+        visible={goalOpen}
+        initialHours={node?.goalHours}
+        onClose={() => setGoalOpen(false)}
+        onSubmit={(hours) => node && applyTimer({ goalHours: hours })}
+      />
     </SafeAreaView>
   );
 }
