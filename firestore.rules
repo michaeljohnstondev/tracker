@@ -110,6 +110,18 @@ service cloud.firestore {
         && (nodeId == rootId || isMember(rootId));
     }
 
+    // Find your own lists again when the membership that points at them is
+    // gone — deleted by mistake, or never written because a share half
+    // failed. Every node records who made it, so ownership survives
+    // independently of membership, and a collection-group read filtered on
+    // ownerUid is provable from the query's own constraint.
+    //
+    // This grants nothing new: it returns only documents you created, and
+    // rebuilding the membership still has to satisfy the rule below.
+    match /{path=**}/nodes/{nodeId} {
+      allow read: if signedIn() && resource.data.ownerUid == uid();
+    }
+
     match /memberships/{docId} {
       allow read: if signedIn()
         && (resource.data.uid == uid() || isMember(resource.data.rootId));

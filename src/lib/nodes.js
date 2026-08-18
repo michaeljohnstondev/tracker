@@ -134,3 +134,35 @@ export async function loadNodes() {
 export async function saveNodes(nodes) {
   await AsyncStorage.setItem(KEY, JSON.stringify(nodes));
 }
+
+// ---- Shared trees, kept on the device too --------------------------------
+
+const MIRROR_KEY = 'sharedTrees.v1';
+
+/**
+ * A local copy of every shared tree, written on each snapshot.
+ *
+ * Sharing used to move a list off the device entirely: the only copy lived in
+ * Firestore, and anything that interrupted the connection to it — a denied
+ * read, a rules change, a bug in this file — was indistinguishable from the
+ * list having been deleted. It has read as lost twice, and once it genuinely
+ * was. Now the last known contents stay on the phone, so a failure to read is
+ * a failure to refresh rather than a disappearance.
+ */
+// Stamped with the account it belongs to, so signing in as someone else shows
+// their lists rather than the last person's.
+export async function loadSharedMirror() {
+  const raw = await AsyncStorage.getItem(MIRROR_KEY);
+  if (raw == null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.uid && parsed?.trees ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveSharedMirror(uid, trees) {
+  if (!uid) return;
+  await AsyncStorage.setItem(MIRROR_KEY, JSON.stringify({ uid, trees }));
+}

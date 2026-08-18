@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   doc,
   deleteDoc,
   getDoc,
@@ -137,6 +138,37 @@ export function publishInto({ node, descendants, parentId, rootId, uid }) {
   return Promise.all(writes);
 }
 
+/**
+ * Every tree this user made, found without consulting memberships.
+ *
+ * Membership is a single point of failure: it's the only record of which trees
+ * are yours, so losing those documents makes every shared list invisible while
+ * the lists themselves sit there untouched. Ownership is recorded on the nodes
+ * as well, which makes it recoverable — a collection-group read of everything
+ * you created, reduced to the trees they belong to.
+ */
+export async function findOwnedRootIds(uid) {
+  const snap = await getDocs(
+    query(collectionGroup(db, 'nodes'), where('ownerUid', '==', uid))
+  );
+  const roots = new Set();
+  snap.docs.forEach((d) => {
+    const { rootId } = snapData(d) || {};
+    if (rootId) roots.add(rootId);
+  });
+  return Array.from(roots);
+}
+
+/** Put back the membership for a tree you own. */
+export function claimOwnTree(rootId, uid) {
+  return setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
+    rootId,
+    uid,
+    role: 'owner',
+    joinedAt: Date.now(),
+  });
+}
+
 /** Live view of every shared tree this user belongs to. */
 export function subscribeToMemberships(uid, onChange, onError) {
   return onSnapshot(
@@ -213,22 +245,46 @@ export async function createInvite(rootId, uid, attempts = 5) {
   throw new Error('Could not generate an invite code. Try again.');
 }
 
+/**
+ * Join by invite code — or, failing that, by the list's own id.
+ *
+ * The second form is how you get back a list whose membership has gone missing
+ * while the list itself is still there. It looks like a back door and isn't
+ * one: the write is an ordinary membership create, and the rules only permit it
+ * for whoever owns the tree. Anyone else's attempt is refused by the server, so
+ * knowing an id buys nothing.
+ */
 export async function redeemInvite(code, uid) {
-  const normalized = String(code || '').trim().toUpperCase();
-  if (!normalized) throw new Error('Enter an invite code.');
+  const raw = String(code || '').trim();
+  if (!raw) throw new Error('Enter an invite code.');
 
-  const snap = await getDoc(doc(db, 'invites', normalized));
-  if (!snapExists(snap)) throw new Error('That code isn’t valid.');
+  const snap = await getDoc(doc(db, 'invites', raw.toUpperCase()));
+  if (snapExists(snap)) {
+    const { rootId } = snapData(snap);
+    await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
+      rootId,
+      uid,
+      role: 'member',
+      joinedAt: Date.now(),
+      usedInviteCode: raw.toUpperCase(),
+    });
+    return rootId;
+  }
 
-  const { rootId } = snapData(snap);
-  await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
-    rootId,
-    uid,
-    role: 'member',
-    joinedAt: Date.now(),
-    usedInviteCode: normalized,
-  });
-  return rootId;
+  // No such code. Ownership can't be checked from here — reading the root node
+  // needs the very membership being restored — so the write is simply
+  // attempted and the rules decide.
+  try {
+    await setDoc(doc(db, 'memberships', membershipId(raw, uid)), {
+      rootId: raw,
+      uid,
+      role: 'owner',
+      joinedAt: Date.now(),
+    });
+    return raw;
+  } catch {
+    throw new Error('That isn’t a valid code, or that list isn’t yours.');
+  }
 }
 
 // ---- Invitations by email ------------------------------------------------

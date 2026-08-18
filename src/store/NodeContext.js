@@ -10,6 +10,8 @@ import React, {
 import {
   loadNodes,
   saveNodes,
+  loadSharedMirror,
+  saveSharedMirror,
   makeNode,
   descendantsOf,
   childrenOf,
@@ -50,14 +52,42 @@ export function NodeProvider({ children }) {
   const localRef = useRef([]);
   localRef.current = localNodes;
 
+  // The device's own copy of the shared trees, and whether the server has said
+  // anything yet this session.
+  const mirrorRef = useRef(null);
+  const answered = useRef(false);
+  const sharedRef = useRef({});
+  sharedRef.current = sharedTrees;
+  const healed = useRef(false);
+
   useEffect(() => {
     (async () => {
-      const [nodes, savedFiling] = await Promise.all([loadNodes(), loadFiling()]);
+      const [nodes, savedFiling, mirror] = await Promise.all([
+        loadNodes(),
+        loadFiling(),
+        loadSharedMirror(),
+      ]);
       setLocalNodes(nodes);
       setFiling(savedFiling);
+      mirrorRef.current = mirror;
       setLoaded(true);
     })();
   }, []);
+
+  /**
+   * Mirrored on every change, so the device always holds the last thing it saw.
+   *
+   * Not written until the server has actually answered. State is empty for the
+   * moment between signing in and the first snapshot, and saving then would
+   * overwrite the backup with nothing — precisely when it's most needed. An
+   * empty answer, on the other hand, is a real answer: it means every list has
+   * been left, and the mirror should say so.
+   */
+  useEffect(() => {
+    if (!loaded || !uid) return;
+    if (!answered.current && !Object.keys(sharedTrees).length) return;
+    saveSharedMirror(uid, sharedTrees);
+  }, [sharedTrees, loaded, uid]);
 
   const commitLocal = useCallback((next) => {
     setLocalNodes(next);
@@ -69,8 +99,21 @@ export function NodeProvider({ children }) {
 
   useEffect(() => {
     if (!uid) {
+      // Cleared from view only. The mirror on disk is left alone, so signing
+      // back in — including from the crash screen's escape hatch — brings
+      // everything back rather than starting from nothing.
+      answered.current = false;
+      healed.current = false;
       setSharedTrees({});
       return undefined;
+    }
+
+    // Show this account's last known lists straight away, before Firestore has
+    // been asked anything.
+    if (mirrorRef.current?.uid === uid) {
+      setSharedTrees((live) =>
+        Object.keys(live).length ? live : mirrorRef.current.trees
+      );
     }
 
     const perTree = new Map();
@@ -91,8 +134,31 @@ export function NodeProvider({ children }) {
       uid,
       (memberships) => {
         const ids = new Set(memberships.map((m) => m.rootId).filter(Boolean));
+        answered.current = true;
 
-        Array.from(perTree.keys()).forEach((rootId) => {
+        // Anything you made but no longer have a membership for gets its
+        // membership put back. Runs once a session, and normally finds
+        // nothing — it exists because the memberships collection is the only
+        // record of which lists are yours, and losing it hid every shared
+        // list while the lists themselves sat there intact.
+        if (!healed.current) {
+          healed.current = true;
+          remote
+            .findOwnedRootIds(uid)
+            .then((owned) =>
+              Promise.all(
+                owned
+                  .filter((rootId) => !ids.has(rootId))
+                  .map((rootId) => remote.claimOwnTree(rootId, uid))
+              )
+            )
+            .catch((err) => reportRemote('recovering your lists', err));
+        }
+
+        // Dropped only when the membership itself is gone — you left, or were
+        // removed. That is the one signal that genuinely means "this is not
+        // your list any more", as opposed to "this could not be read just now".
+        Object.keys(sharedRef.current).forEach((rootId) => {
           if (!ids.has(rootId)) drop(rootId);
         });
 
@@ -103,14 +169,15 @@ export function NodeProvider({ children }) {
             remote.subscribeToTree(
               rootId,
               (nodes) => setSharedTrees((prev) => ({ ...prev, [rootId]: nodes })),
-              // A tree can stop being readable while you're watching it —
-              // someone deletes it, or drops you from it. Without a handler
-              // that surfaces as an uncaught error rather than one dead
-              // subscription, and takes everything else with it.
-              (err) => {
-                reportRemote('shared list', err);
-                drop(rootId);
-              }
+              // Report it and leave the list exactly where it is.
+              //
+              // This used to drop the tree, which is how a momentary permission
+              // error read as "my shared list has vanished" — the list was
+              // never gone, only unreadable for a second, and dropping it
+              // also killed the subscription so it stayed gone until a
+              // restart. A failure to read is a failure to refresh. What's on
+              // screen is the last thing we saw, which is still true.
+              (err) => reportRemote('shared list', err)
             )
           );
         });

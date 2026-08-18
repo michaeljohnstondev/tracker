@@ -90,17 +90,19 @@ export default function JoinListModal({ visible, onClose }) {
             ) : (
               <>
                 <Text style={styles.body}>
-                  Enter the code you were sent.
+                  Enter the code you were sent — or a list's own id, to get
+                  back one of yours.
                 </Text>
                 <VibeInput
                   placeholder="ABC123"
                   value={code}
-                  // Codes are stored uppercase; normalising as they type avoids
-                  // a "that code isn't valid" for a purely cosmetic mismatch.
-                  onChangeText={(t) => setCode(t.toUpperCase())}
-                  autoCapitalize="characters"
+                  // Left exactly as typed. Codes are matched case-insensitively
+                  // anyway, and forcing uppercase here made it impossible to
+                  // enter a list id, which is lower case.
+                  onChangeText={setCode}
+                  autoCapitalize="none"
                   autoCorrect={false}
-                  maxLength={8}
+                  maxLength={32}
                   autoFocus
                   onSubmitEditing={canJoin ? handleJoin : undefined}
                   returnKeyType="go"
@@ -165,8 +167,10 @@ const styles = StyleSheet.create({
   input: {
     marginTop: 16,
     textAlign: 'center',
-    letterSpacing: 6,
-    fontSize: 22,
+    // Loose enough to read a six-character code back to someone, tight enough
+    // that a full list id still fits on one line.
+    letterSpacing: 3,
+    fontSize: 20,
   },
   actions: {
     marginTop: 20,
