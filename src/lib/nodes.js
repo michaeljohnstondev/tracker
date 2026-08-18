@@ -42,12 +42,23 @@ export function newId() {
   ).toString(36)}`;
 }
 
-export function makeNode({ name, color = NODE_COLORS[0], parentId = null, ...rest }) {
+export function makeNode({
+  name,
+  color = NODE_COLORS[0],
+  parentId = null,
+  kind = 'item',
+  ...rest
+}) {
   return {
     id: newId(),
     name,
     color,
     parentId,
+    // Presentation only. A category and an item behave identically — both can
+    // hold children, run a timer, repeat — but you don't tick a folder off, so
+    // a category shows no checkbox. It's about saying what you meant, not
+    // about what the thing can do.
+    kind,
     // Timestamp rather than an index: a new node sorts last without having to
     // know how many siblings it has, and two devices adding at once don't
     // collide on the same position.

@@ -43,17 +43,23 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
         pressed && styles.pressed,
       ]}
     >
-      <Pressable
-        onPress={onToggle}
-        hitSlop={{ top: 12, bottom: 12, left: 10, right: 6 }}
-        style={[
-          styles.checkbox,
-          { borderColor: color },
-          node.done && { backgroundColor: color },
-        ]}
-      >
-        {node.done ? <Text style={styles.check}>✓</Text> : null}
-      </Pressable>
+      {/* A category isn't something you tick off, so it gets its icon where
+          the checkbox would be. */}
+      {node.kind === 'category' ? (
+        <Text style={[styles.folder, { color }]}>🗂</Text>
+      ) : (
+        <Pressable
+          onPress={onToggle}
+          hitSlop={{ top: 12, bottom: 12, left: 10, right: 6 }}
+          style={[
+            styles.checkbox,
+            { borderColor: color },
+            node.done && { backgroundColor: color },
+          ]}
+        >
+          {node.done ? <Text style={styles.check}>✓</Text> : null}
+        </Pressable>
+      )}
 
       <View style={styles.text}>
         <View style={styles.nameRow}>
@@ -144,6 +150,12 @@ const styles = StyleSheet.create({
     color: theme.colors.black,
     fontSize: 15,
     fontWeight: '900',
+  },
+  folder: {
+    fontSize: 20,
+    width: 24,
+    marginRight: 14,
+    textAlign: 'center',
   },
   text: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },

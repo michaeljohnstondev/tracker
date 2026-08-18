@@ -14,18 +14,13 @@ import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 export default function AddNodeModal({ visible, onClose, onCreate }) {
   const [name, setName] = useState('');
   const [color, setColor] = useState(NODE_COLORS[0]);
-  // Not types — just a head start. Everything here can be added or removed
-  // afterwards on the thing itself, but a fresh node advertises none of it,
-  // so without these the app looks like it does less than it does.
-  const [withTimer, setWithTimer] = useState(false);
-  const [repeat, setRepeat] = useState(null);
+  const [kind, setKind] = useState('item');
   const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
     setName('');
     setColor(NODE_COLORS[0]);
-    setWithTimer(false);
-    setRepeat(null);
+    setKind('item');
   };
 
   const handleClose = () => {
@@ -36,12 +31,7 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
   const handleCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onCreate({
-      name: trimmed,
-      color,
-      ...(withTimer ? { goalHours: 1 } : null),
-      ...(repeat ? { repeat } : null),
-    });
+    onCreate({ name: trimmed, color, kind });
     reset();
   };
 
@@ -67,34 +57,27 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
               returnKeyType="done"
             />
 
-            <Text style={styles.label}>Start it with</Text>
-            <Text style={styles.hint}>
-              Optional — everything can be added later. Anything can hold other
-              things inside it, so a list is just something you put things in.
-            </Text>
+            <Text style={styles.label}>What is it</Text>
             <View style={styles.chips}>
               <VibeButton
-                label="⏱ Timer"
+                label="✓ Item"
                 variant="toggle"
-                color={withTimer ? 'green' : 'gray'}
-                onPress={() => setWithTimer((v) => !v)}
+                color={kind === 'item' ? 'green' : 'gray'}
+                onPress={() => setKind('item')}
                 style={styles.chip}
               />
               <VibeButton
-                label="🔁 Daily"
+                label="🗂 Category"
                 variant="toggle"
-                color={repeat === 'daily' ? 'green' : 'gray'}
-                onPress={() => setRepeat((r) => (r === 'daily' ? null : 'daily'))}
-                style={styles.chip}
-              />
-              <VibeButton
-                label="🔁 Weekly"
-                variant="toggle"
-                color={repeat === 'weekly' ? 'green' : 'gray'}
-                onPress={() => setRepeat((r) => (r === 'weekly' ? null : 'weekly'))}
+                color={kind === 'category' ? 'green' : 'gray'}
+                onPress={() => setKind('category')}
                 style={styles.chip}
               />
             </View>
+            <Text style={styles.hint}>
+              Both can hold things inside them and carry a timer or a reminder.
+              The difference is that an item is something you tick off.
+            </Text>
 
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
@@ -161,8 +144,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
-    marginBottom: 10,
-    marginTop: -4,
+    marginTop: 10,
     fontFamily: theme.fonts.main,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

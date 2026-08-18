@@ -244,7 +244,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
         keyboardVerticalOffset={8}
       >
         <ScrollViewContainer
-          contentContainerStyle={styles.list}
+          // The list's own padding is dropped while empty, or it offsets the
+          // centred message downward by the difference between top and bottom.
+          contentContainerStyle={[
+            styles.list,
+            loaded && children.length === 0 && isRoot && styles.listEmpty,
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -449,6 +454,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     flexGrow: 1,
+  },
+  listEmpty: {
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   emptyWrap: {
     paddingVertical: 40,
