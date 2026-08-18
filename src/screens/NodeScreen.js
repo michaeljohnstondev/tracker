@@ -267,11 +267,17 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 
           {/* Same wording wherever you are — an empty node and an empty home
               screen are the same situation, and the prompt is the useful part
-              of the message. */}
+              of the message.
+
+              On an otherwise blank screen it takes the whole space and sits in
+              the middle. On a node it can't, because the details sit below it
+              and it would push them off. */}
           {loaded && children.length === 0 && (
-            <Text style={styles.empty}>
-              Nothing yet.{'\n'}Add something to get started.
-            </Text>
+            <View style={[styles.emptyWrap, isRoot && styles.emptyWrapFill]}>
+              <Text style={styles.empty}>
+                Nothing yet.{'\n'}Add something to get started.
+              </Text>
+            </View>
           )}
 
           {hasDetails && (
@@ -444,11 +450,18 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     flexGrow: 1,
   },
+  emptyWrap: {
+    paddingVertical: 40,
+  },
+  emptyWrapFill: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 0,
+  },
   empty: {
     color: theme.colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
-    marginTop: 40,
     lineHeight: 24,
     fontFamily: theme.fonts.main,
   },
