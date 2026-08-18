@@ -17,6 +17,7 @@ import {
 import { loadFiling, saveFiling } from '../lib/filing';
 import { useAuth } from './AuthContext';
 import * as remote from '../services/nodes';
+import VibeAlert from '../components/ui/VibeAlert';
 
 const NodeContext = createContext(null);
 
@@ -201,7 +202,12 @@ export function NodeProvider({ children }) {
       // gesture: put it in the shared list and it becomes shared.
       if (!node.shared && target?.shared) {
         const descendants = descendantsOf(localRef.current, node.id);
-        remote
+        const doomed = new Set([node.id, ...descendants.map((n) => n.id)]);
+
+        // Awaited before removing anything. The same mistake as sharing —
+        // deleting first and trusting the upload — is how a folder vanished
+        // when the write turned out to be refused.
+        return remote
           .publishInto({
             node,
             descendants,
@@ -209,13 +215,16 @@ export function NodeProvider({ children }) {
             rootId: target.rootId,
             uid,
           })
-          .catch((err) => console.error('[nodes] publish failed:', err?.message || err));
-
-        // The local originals go once their published twins exist; the
-        // subscription brings them straight back as part of the shared tree.
-        const doomed = new Set([node.id, ...descendants.map((n) => n.id)]);
-        commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
-        return Promise.resolve();
+          .then(() => {
+            commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
+          })
+          .catch((err) => {
+            console.error('[nodes] publish failed:', err?.message || err);
+            VibeAlert(
+              'Could not move',
+              `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`
+            );
+          });
       }
 
       // A shared tree's root is filed personally rather than actually moved,
@@ -259,6 +268,9 @@ export function NodeProvider({ children }) {
 
   // ---- Sharing ------------------------------------------------------------
 
+  // Shares awaiting proof that the upload actually landed: rootId -> localId.
+  const pendingShares = useRef(new Map());
+
   const shareNode = useCallback(
     (node) => {
       if (!uid) throw new Error('Sign in to share.');
@@ -266,9 +278,21 @@ export function NodeProvider({ children }) {
 
       const descendants = descendantsOf(localRef.current, node.id);
       const { rootId, settled } = remote.shareSubtree({ node, descendants, uid });
-      settled.catch((err) =>
-        console.error('[nodes] share failed:', err?.message || err)
-      );
+
+      // The local copy is NOT deleted here. It was, once, and when the upload
+      // was refused it took the original with it — the thing being shared
+      // simply vanished. Nothing is removed until the shared copy has been
+      // seen coming back down.
+      pendingShares.current.set(rootId, node.id);
+
+      settled.catch((err) => {
+        pendingShares.current.delete(rootId);
+        console.error('[nodes] share failed:', err?.message || err);
+        VibeAlert(
+          'Could not share',
+          `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`
+        );
+      });
 
       // Remember where it was filed, so the shared copy reappears in the same
       // place rather than jumping to the top level.
@@ -279,18 +303,29 @@ export function NodeProvider({ children }) {
     [uid, setFiledUnder]
   );
 
-  /** Drop the local copy once its shared twin has arrived. */
-  const finalizeShare = useCallback(
-    (localId) => {
-      if (!localId) return;
-      const doomed = new Set([
-        localId,
-        ...descendantsOf(localRef.current, localId).map((n) => n.id),
-      ]);
-      commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
-    },
-    [commitLocal]
-  );
+  // Drop a local copy only once its shared twin has arrived from the server.
+  useEffect(() => {
+    if (!pendingShares.current.size) return;
+
+    const landed = [];
+    pendingShares.current.forEach((localId, rootId) => {
+      const tree = sharedTrees[rootId];
+      if (tree?.some((n) => n.id === rootId)) landed.push([rootId, localId]);
+    });
+    if (!landed.length) return;
+
+    const doomed = new Set();
+    landed.forEach(([rootId, localId]) => {
+      pendingShares.current.delete(rootId);
+      doomed.add(localId);
+      descendantsOf(localRef.current, localId).forEach((n) => doomed.add(n.id));
+    });
+
+    commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
+  }, [sharedTrees, commitLocal]);
+
+  // Kept for callers; the removal itself is driven by confirmation above.
+  const finalizeShare = useCallback(() => {}, []);
 
   const value = {
     nodes,

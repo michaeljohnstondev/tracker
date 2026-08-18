@@ -8,6 +8,7 @@ import { AuthProvider } from './src/store/AuthContext';
 import { NodeProvider, useNodes } from './src/store/NodeContext';
 import NodeScreen from './src/screens/NodeScreen';
 import UpdateBanner from './src/components/ui/UpdateBanner';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import { useAppUpdate } from './src/lib/useAppUpdate';
 
 /**
@@ -71,11 +72,16 @@ export default function App() {
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
           {/* Auth wraps nodes: the store subscribes to shared trees keyed on
               the signed-in uid, so it has to read auth state. */}
-          <AuthProvider>
-            <NodeProvider>
-              <Router />
-            </NodeProvider>
-          </AuthProvider>
+          {/* Shows a crash rather than dying from it — console output is
+              stripped from production bundles, so without this a render error
+              reports nothing at all. */}
+          <ErrorBoundary>
+            <AuthProvider>
+              <NodeProvider>
+                <Router />
+              </NodeProvider>
+            </AuthProvider>
+          </ErrorBoundary>
           {/* Last child so it floats above the screen rather than under it. */}
           <UpdateBanner visible={isUpdateReady} onRestart={applyUpdate} />
         </View>
