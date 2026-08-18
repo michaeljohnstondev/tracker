@@ -215,11 +215,15 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     [onReplace, finalizeShare]
   );
 
-  // A category is a place you put things, so its screen is just its contents.
-  // Notes, a timer, a repeat and reminders belong to the thing itself, which
-  // is what an item is — putting them under a folder is noise on every screen
-  // you pass through on the way somewhere else.
-  const hasDetails = !isRoot && node.kind !== 'category';
+  // The two halves of the app, and a node is exactly one of them.
+  //
+  // A category is a place you put things: its screen is its contents, and
+  // nothing else. An item is a thing: its screen is its own notes, timer,
+  // repeat and reminders, and it holds nothing. Letting an item contain items
+  // made every leaf a folder, which is absurd, and hanging a form under every
+  // folder put one on each screen you pass through on the way somewhere else.
+  const isContainer = isRoot || node.kind === 'category';
+  const hasDetails = !isRoot && !isContainer;
   const doneCount = children.filter((c) => c.done).length;
 
   return (
@@ -257,22 +261,24 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <NestedReorderableList
-            data={children}
-            scrollable={false}
-            keyExtractor={(child) => child.id}
-            onReorder={({ from, to }) => reorderChildren(node?.id ?? null, from, to)}
-            renderItem={({ item: child, index }) => (
-              <NodeCard
-                node={child}
-                index={index}
-                childCount={childCounts[child.id] ?? 0}
-                onPress={() => onOpen(child.id)}
-                onHold={() => onOpen(child.id)}
-                onToggle={() => toggleDone(child)}
-              />
-            )}
-          />
+          {isContainer && (
+            <NestedReorderableList
+              data={children}
+              scrollable={false}
+              keyExtractor={(child) => child.id}
+              onReorder={({ from, to }) => reorderChildren(node?.id ?? null, from, to)}
+              renderItem={({ item: child, index }) => (
+                <NodeCard
+                  node={child}
+                  index={index}
+                  childCount={childCounts[child.id] ?? 0}
+                  onPress={() => onOpen(child.id)}
+                  onHold={() => onOpen(child.id)}
+                  onToggle={() => toggleDone(child)}
+                />
+              )}
+            />
+          )}
 
           {/* Same wording wherever you are — an empty node and an empty home
               screen are the same situation, and the prompt is the useful part
@@ -281,7 +287,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
               On an otherwise blank screen it takes the whole space and sits in
               the middle. On a node it can't, because the details sit below it
               and it would push them off. */}
-          {loaded && children.length === 0 && (
+          {isContainer && loaded && children.length === 0 && (
             <View style={[styles.emptyWrap, isRoot && styles.emptyWrapFill]}>
               <Text style={styles.empty}>
                 Nothing yet.{'\n'}Add something to get started.
@@ -365,35 +371,39 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
           )}
         </ScrollViewContainer>
 
-        <View style={styles.footer}>
-          {doneCount > 0 && (
-            <Pressable
-              onPress={() =>
-                children
-                  .filter((c) => c.done && !c.repeat)
-                  .forEach((c) => deleteNode(c))
-              }
-              hitSlop={8}
-            >
-              <Text style={styles.clearDone}>Clear {doneCount} completed</Text>
-            </Pressable>
-          )}
-          <VibeButton label="Add" onPress={() => setAdding(true)} />
-          {isRoot && (
-            <Pressable onPress={() => setJoining(true)} hitSlop={8}>
-              <Text style={styles.joinLink}>Join with code</Text>
-            </Pressable>
-          )}
-        </View>
+        {isContainer && (
+          <View style={styles.footer}>
+            {doneCount > 0 && (
+              <Pressable
+                onPress={() =>
+                  children
+                    .filter((c) => c.done && !c.repeat)
+                    .forEach((c) => deleteNode(c))
+                }
+                hitSlop={8}
+              >
+                <Text style={styles.clearDone}>Clear {doneCount} completed</Text>
+              </Pressable>
+            )}
+            <VibeButton label="Add" onPress={() => setAdding(true)} />
+            {isRoot && (
+              <Pressable onPress={() => setJoining(true)} hitSlop={8}>
+                <Text style={styles.joinLink}>Join with code</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       <AddNodeModal
         visible={adding}
         onClose={() => setAdding(false)}
+        // Stays put rather than opening what was just made: adding several
+        // things in a row is the common case, and being thrown inside each one
+        // means backing out every time.
         onCreate={(fields) => {
-          const id = addNode(fields, node);
+          addNode(fields, node);
           setAdding(false);
-          if (id) onOpen(id);
         }}
       />
 
