@@ -265,11 +265,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             )}
           />
 
+          {/* Same wording wherever you are — an empty node and an empty home
+              screen are the same situation, and the prompt is the useful part
+              of the message. */}
           {loaded && children.length === 0 && (
             <Text style={styles.empty}>
-              {isRoot
-                ? 'Nothing yet.\nAdd something to get started.'
-                : 'Nothing inside this yet.'}
+              Nothing yet.{'\n'}Add something to get started.
             </Text>
           )}
 
