@@ -46,7 +46,7 @@ service cloud.firestore {
 
     function ownsTree(rootId) {
       return signedIn()
-        && get(/databases/$(database)/documents/nodes/$(rootId)).data.ownerUid == uid();
+        && get(/databases/$(database)/documents/trees/$(rootId)/nodes/$(rootId)).data.ownerUid == uid();
     }
 
     // An invite code is the shared secret; holding one that points at this
@@ -70,16 +70,14 @@ service cloud.firestore {
       }
     }
 
-    match /nodes/{nodeId} {
-      // Membership in the tree this node belongs to is the whole check —
-      // one lookup, whatever the depth.
-      allow read, update, delete: if isMember(resource.data.rootId);
-
-      // Creating the root of a new shared tree, or adding to one you're in.
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == uid()
-        && (request.resource.data.rootId == nodeId
-            || isMember(request.resource.data.rootId));
+    // The tree's root is in the path, so the rule reads it from there rather
+    // than from document data. That matters: reading a whole tree is then a
+    // plain collection read, and Firestore evaluates query rules against the
+    // query rather than its results — a rule depending on document data can
+    // never be proven from a filter, and the read is denied outright.
+    match /trees/{rootId}/nodes/{nodeId} {
+      allow read, update, delete: if isMember(rootId);
+      allow create: if isMember(rootId) && request.resource.data.ownerUid == uid();
     }
 
     match /memberships/{docId} {

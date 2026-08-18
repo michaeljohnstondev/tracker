@@ -157,7 +157,7 @@ export function NodeProvider({ children }) {
 
   const updateNode = useCallback(
     (node, patch) => {
-      if (node.shared) return remote.updateNode(node.id, patch);
+      if (node.shared) return remote.updateNode(node.rootId, node.id, patch);
       commitLocal(
         localRef.current.map((n) => (n.id === node.id ? { ...n, ...patch } : n))
       );

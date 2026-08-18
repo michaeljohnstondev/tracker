@@ -26,8 +26,17 @@ import { newId } from '../lib/nodes';
  * out of a shared subtree rewrites rootId across that subtree.
  */
 
-const nodesRef = () => collection(db, 'nodes');
-const nodeDoc = (id) => doc(nodesRef(), id);
+// A shared tree's nodes live under its root: trees/{rootId}/nodes/{nodeId}.
+//
+// The root is in the path rather than a field on purpose. Security rules can
+// read a path variable directly, so "may this person read this node" is
+// isMember(rootId) with nothing to prove — and reading a whole tree is a
+// plain collection read rather than a query. With rootId as a field instead,
+// the subscription had to be a query filtered on it, and Firestore evaluates
+// query rules against the query rather than its results: it cannot prove a
+// filter guarantees a rule that reads document data, so it denied the lot.
+const treeRef = (rootId) => collection(db, 'trees', rootId, 'nodes');
+const nodeDoc = (rootId, id) => doc(treeRef(rootId), id);
 
 export const membershipId = (rootId, uid) => `${rootId}_${uid}`;
 
@@ -73,18 +82,24 @@ export function shareSubtree({ node, descendants, uid }) {
   const rootId = node.remoteId ?? newId();
 
   const writes = [
-    setDoc(nodeDoc(rootId), { ...toRemote(node, rootId), parentId: null, ownerUid: uid }),
+    // Membership first: every other write is authorised by it, and Firestore
+    // replays queued writes in order, so it has to land before the rest.
     setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
       rootId,
       uid,
       role: 'owner',
       joinedAt: Date.now(),
     }),
-    // Descendants keep their shape; only their ids move into the shared space.
+    setDoc(nodeDoc(rootId, rootId), {
+      ...toRemote(node, rootId),
+      parentId: null,
+      ownerUid: uid,
+    }),
+    // Descendants keep their shape and their ids; only their home changes.
     ...descendants.map((child) =>
-      setDoc(nodeDoc(child.remoteId ?? child.id), {
+      setDoc(nodeDoc(rootId, child.id), {
         ...toRemote(child, rootId),
-        // A child of the shared root points at the root's remote id.
+        // A direct child of the shared node points at the root's new id.
         parentId: child.parentId === node.id ? rootId : child.parentId,
         ownerUid: uid,
       })
@@ -103,13 +118,13 @@ export function shareSubtree({ node, descendants, uid }) {
  */
 export function publishInto({ node, descendants, parentId, rootId, uid }) {
   const writes = [
-    setDoc(nodeDoc(node.id), {
+    setDoc(nodeDoc(rootId, node.id), {
       ...toRemote(node, rootId),
       parentId,
       ownerUid: uid,
     }),
     ...descendants.map((child) =>
-      setDoc(nodeDoc(child.id), { ...toRemote(child, rootId), ownerUid: uid })
+      setDoc(nodeDoc(rootId, child.id), { ...toRemote(child, rootId), ownerUid: uid })
     ),
   ];
   return Promise.all(writes);
@@ -124,27 +139,31 @@ export function subscribeToMemberships(uid, onChange, onError) {
   );
 }
 
-/** Live view of every node in one shared tree. */
+/**
+ * Live view of every node in one shared tree.
+ *
+ * A plain collection read, not a query — the tree is the collection, so
+ * there's nothing to filter and nothing for the rules to have to prove.
+ */
 export function subscribeToTree(rootId, onChange, onError) {
   return onSnapshot(
-    query(nodesRef(), where('rootId', '==', rootId)),
+    treeRef(rootId),
     (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...snapData(d) }))),
     onError
   );
 }
 
-export function updateNode(id, patch) {
-  return updateDoc(nodeDoc(id), patch);
+export function updateNode(rootId, id, patch) {
+  return updateDoc(nodeDoc(rootId, id), patch);
 }
 
 export function createNode(node, rootId, uid) {
-  const id = node.remoteId ?? node.id;
-  return setDoc(nodeDoc(id), { ...toRemote(node, rootId), ownerUid: uid });
+  return setDoc(nodeDoc(rootId, node.id), { ...toRemote(node, rootId), ownerUid: uid });
 }
 
 export async function deleteNode(id, rootId) {
   // Children first, so nothing is left pointing at a parent that has gone.
-  const snap = await getDocs(query(nodesRef(), where('rootId', '==', rootId)));
+  const snap = await getDocs(treeRef(rootId));
   const all = snap.docs.map((d) => ({ id: d.id, ...snapData(d) }));
 
   const doomed = new Set([id]);
@@ -159,7 +178,9 @@ export async function deleteNode(id, rootId) {
     });
   }
 
-  await Promise.all(Array.from(doomed).map((nodeId) => deleteDoc(nodeDoc(nodeId))));
+  await Promise.all(
+    Array.from(doomed).map((nodeId) => deleteDoc(nodeDoc(rootId, nodeId)))
+  );
 }
 
 // ---- Invites -------------------------------------------------------------
