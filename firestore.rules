@@ -77,7 +77,16 @@ service cloud.firestore {
     // never be proven from a filter, and the read is denied outright.
     match /trees/{rootId}/nodes/{nodeId} {
       allow read, update, delete: if isMember(rootId);
-      allow create: if isMember(rootId) && request.resource.data.ownerUid == uid();
+
+      // Creating the root is what establishes a tree, so it cannot require
+      // membership: the membership rule reads the root to confirm ownership,
+      // and requiring each to exist before the other deadlocks — nothing gets
+      // written and sharing silently does nothing. Claiming a root is safe on
+      // its own; the id is freshly generated, and everything after it needs
+      // the membership that only the owner can then create.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == uid()
+        && (nodeId == rootId || isMember(rootId));
     }
 
     match /memberships/{docId} {

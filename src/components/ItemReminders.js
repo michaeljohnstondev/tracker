@@ -30,11 +30,22 @@ export function normalizeReminders(value) {
 export default function ItemReminders({ value = [], onChange }) {
   const [stage, setStage] = useState(null);
   const [pendingDate, setPendingDate] = useState(null);
+  // The reminder being changed, or null when adding a new one. Editing and
+  // adding are the same two-step pick; the only difference is whether the old
+  // time makes way for the new one.
+  const [editing, setEditing] = useState(null);
 
   const times = normalizeReminders(value).slice().sort((a, b) => a - b);
 
   const open = useCallback(() => {
+    setEditing(null);
     setPendingDate(new Date());
+    setStage('date');
+  }, []);
+
+  const edit = useCallback((at) => {
+    setEditing(at);
+    setPendingDate(new Date(at));
     setStage('date');
   }, []);
 
@@ -64,11 +75,20 @@ export default function ItemReminders({ value = [], onChange }) {
         );
         return;
       }
-      if (times.includes(at)) return;
 
-      onChange([...times, at].sort((a, b) => a - b));
+      const without = editing != null ? times.filter((t) => t !== editing) : times;
+      if (without.includes(at)) {
+        // Already set for that moment. Dropping the one being edited would
+        // silently delete it, so leave things as they were.
+        onChange(without.length === times.length ? times : [...without, at].sort((a, b) => a - b));
+        setEditing(null);
+        return;
+      }
+
+      onChange([...without, at].sort((a, b) => a - b));
+      setEditing(null);
     },
-    [pendingDate, times, onChange]
+    [pendingDate, times, editing, onChange]
   );
 
   const remove = useCallback(
@@ -87,7 +107,11 @@ export default function ItemReminders({ value = [], onChange }) {
 
         {times.map((at) => (
           <View key={at} style={[styles.row, styles.rowBorder]}>
-            <Text style={styles.rowLabel}>{fmtStart(at)}</Text>
+            {/* Tapping the time changes it; the ✕ stays a separate target so
+                you can't delete one by aiming badly. */}
+            <TouchableOpacity onPress={() => edit(at)} style={styles.rowMain}>
+              <Text style={styles.rowLabel}>{fmtStart(at)}</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => remove(at)}
               style={styles.deleteBtn}
@@ -147,6 +171,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.inputBorder,
   },
+  rowMain: { flex: 1 },
   rowLabel: {
     color: theme.colors.textPrimary,
     fontSize: 16,

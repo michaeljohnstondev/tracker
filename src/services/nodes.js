@@ -82,18 +82,20 @@ export function shareSubtree({ node, descendants, uid }) {
   const rootId = node.remoteId ?? newId();
 
   const writes = [
-    // Membership first: every other write is authorised by it, and Firestore
-    // replays queued writes in order, so it has to land before the rest.
+    // Order matters, and it's circular unless the root goes first: the
+    // membership rule reads the root node to confirm ownership, while every
+    // other node's rule requires that membership. Firestore replays queued
+    // writes in order, so root, then membership, then the rest.
+    setDoc(nodeDoc(rootId, rootId), {
+      ...toRemote(node, rootId),
+      parentId: null,
+      ownerUid: uid,
+    }),
     setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
       rootId,
       uid,
       role: 'owner',
       joinedAt: Date.now(),
-    }),
-    setDoc(nodeDoc(rootId, rootId), {
-      ...toRemote(node, rootId),
-      parentId: null,
-      ownerUid: uid,
     }),
     // Descendants keep their shape and their ids; only their home changes.
     ...descendants.map((child) =>
