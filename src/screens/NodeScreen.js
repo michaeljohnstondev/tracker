@@ -215,7 +215,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     [onReplace, finalizeShare]
   );
 
-  const hasDetails = !isRoot;
+  // A category is a place you put things, so its screen is just its contents.
+  // Notes, a timer, a repeat and reminders belong to the thing itself, which
+  // is what an item is — putting them under a folder is noise on every screen
+  // you pass through on the way somewhere else.
+  const hasDetails = !isRoot && node.kind !== 'category';
   const doneCount = children.filter((c) => c.done).length;
 
   return (
