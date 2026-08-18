@@ -309,12 +309,15 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
           // centred message downward by the difference between top and bottom.
           contentContainerStyle={[
             styles.list,
-            loaded && children.length === 0 && isRoot && styles.listEmpty,
+            loaded && isContainer && children.length === 0 && styles.listEmpty,
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {isContainer && (
+          {/* Not rendered while empty. An empty list still occupies the space
+              it would have taken, which pushed the message below it to the
+              bottom of the screen instead of the middle. */}
+          {isContainer && children.length > 0 && (
             <NestedReorderableList
               data={children}
               // The list has no height of its own — it grows to fit and the
@@ -339,15 +342,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             />
           )}
 
-          {/* Same wording wherever you are — an empty node and an empty home
-              screen are the same situation, and the prompt is the useful part
-              of the message.
-
-              On an otherwise blank screen it takes the whole space and sits in
-              the middle. On a node it can't, because the details sit below it
-              and it would push them off. */}
+          {/* Same wording wherever you are — an empty category and an empty
+              home screen are the same situation, and the prompt is the useful
+              part of the message. Only containers can be empty in this sense;
+              an item holds nothing by design. */}
           {isContainer && loaded && children.length === 0 && (
-            <View style={[styles.emptyWrap, isRoot && styles.emptyWrapFill]}>
+            <View style={styles.emptyWrap}>
               <Text style={styles.empty}>
                 Nothing yet.{'\n'}Add something to get started.
               </Text>
@@ -566,12 +566,8 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
   },
   emptyWrap: {
-    paddingVertical: 40,
-  },
-  emptyWrapFill: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 0,
   },
   empty: {
     color: theme.colors.textSecondary,
