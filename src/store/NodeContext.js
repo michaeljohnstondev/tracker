@@ -72,23 +72,36 @@ export function NodeProvider({ children }) {
       });
     };
 
-    const unsubMemberships = remote.subscribeToMemberships(uid, (memberships) => {
-      const ids = new Set(memberships.map((m) => m.rootId).filter(Boolean));
+    const unsubMemberships = remote.subscribeToMemberships(
+      uid,
+      (memberships) => {
+        const ids = new Set(memberships.map((m) => m.rootId).filter(Boolean));
 
-      Array.from(perTree.keys()).forEach((rootId) => {
-        if (!ids.has(rootId)) drop(rootId);
-      });
+        Array.from(perTree.keys()).forEach((rootId) => {
+          if (!ids.has(rootId)) drop(rootId);
+        });
 
-      ids.forEach((rootId) => {
-        if (perTree.has(rootId)) return;
-        perTree.set(
-          rootId,
-          remote.subscribeToTree(rootId, (nodes) =>
-            setSharedTrees((prev) => ({ ...prev, [rootId]: nodes }))
-          )
-        );
-      });
-    });
+        ids.forEach((rootId) => {
+          if (perTree.has(rootId)) return;
+          perTree.set(
+            rootId,
+            remote.subscribeToTree(
+              rootId,
+              (nodes) => setSharedTrees((prev) => ({ ...prev, [rootId]: nodes })),
+              // A tree can stop being readable while you're watching it —
+              // someone deletes it, or drops you from it. Without a handler
+              // that surfaces as an uncaught error rather than one dead
+              // subscription, and takes everything else with it.
+              (err) => {
+                console.error('[nodes] tree', rootId, err?.message || err);
+                drop(rootId);
+              }
+            )
+          );
+        });
+      },
+      (err) => console.error('[nodes] memberships:', err?.message || err)
+    );
 
     return () => {
       unsubMemberships();
@@ -255,7 +268,9 @@ export function NodeProvider({ children }) {
             console.error('[nodes] publish failed:', err?.message || err);
             VibeAlert(
               'Could not move',
-              `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`
+              `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`,
+              [],
+              'error'
             );
           });
       }
@@ -323,7 +338,9 @@ export function NodeProvider({ children }) {
         console.error('[nodes] share failed:', err?.message || err);
         VibeAlert(
           'Could not share',
-          `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`
+          `Nothing was uploaded, and your copy is untouched.\n\n${err?.message || err}`,
+          [],
+          'error'
         );
       });
 

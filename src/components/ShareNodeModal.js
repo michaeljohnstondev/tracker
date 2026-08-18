@@ -49,7 +49,7 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
     try {
       await signIn();
     } catch (e) {
-      VibeAlert('Sign-in failed', e?.message ?? 'Please try again.');
+      VibeAlert('Sign-in failed', e?.message ?? 'Please try again.', [], 'error');
     }
   }, [signIn]);
 
@@ -68,7 +68,7 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
       // which is exactly what a notification would tell you about.
       ensurePushPermission(user?.uid);
     } catch (e) {
-      VibeAlert('Could not share', e?.message ?? 'Please try again.');
+      VibeAlert('Could not share', e?.message ?? 'Please try again.', [], 'error');
     }
   }, [shareNode, node, user, onPublished]);
 
@@ -88,7 +88,7 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
       setInvited(email.trim());
       setEmail('');
     } catch (e) {
-      VibeAlert('Could not invite', e?.message ?? 'Please try again.');
+      VibeAlert('Could not invite', e?.message ?? 'Please try again.', [], 'error');
     } finally {
       setWorking(false);
     }
@@ -113,7 +113,7 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
           `Open Tracker, tap "Join with code" and enter it.`,
       });
     } catch (e) {
-      VibeAlert('Could not create invite', e?.message ?? 'Please try again.');
+      VibeAlert('Could not create invite', e?.message ?? 'Please try again.', [], 'error');
     } finally {
       setWorking(false);
     }

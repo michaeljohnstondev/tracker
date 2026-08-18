@@ -32,7 +32,7 @@ export default function JoinListModal({ visible, onClose }) {
     try {
       await signIn();
     } catch (e) {
-      VibeAlert('Sign-in failed', e?.message ?? 'Please try again.');
+      VibeAlert('Sign-in failed', e?.message ?? 'Please try again.', [], 'error');
     }
   }, [signIn]);
 
@@ -45,7 +45,12 @@ export default function JoinListModal({ visible, onClose }) {
       ensurePushPermission(user.uid);
       onClose();
     } catch (e) {
-      VibeAlert('Could not join', e?.message ?? 'Check the code and try again.');
+      VibeAlert(
+        'Could not join',
+        e?.message ?? 'Check the code and try again.',
+        [],
+        'error'
+      );
     } finally {
       setWorking(false);
     }

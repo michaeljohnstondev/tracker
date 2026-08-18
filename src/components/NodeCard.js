@@ -9,6 +9,8 @@ import theme from '../theme/themes';
 import { fmtElapsedShort, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
 
+const REPEAT_LABELS = { daily: 'Daily', weekly: 'Weekly', always: 'Always' };
+
 /**
  * One row. Since every node is the same kind of thing, the row shows whatever
  * that particular node happens to carry — a running clock, a child count, a
@@ -27,8 +29,9 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
   const bits = [];
   if (running) bits.push(fmtElapsedShort(elapsed));
   else if (node.goalHours) bits.push(`${node.goalHours}h goal`);
+  if (node.count != null) bits.push(`Count ${node.count}`);
   if (childCount) bits.push(`${childCount} inside`);
-  if (node.repeat) bits.push(node.repeat === 'daily' ? 'Daily' : 'Weekly');
+  if (node.repeat) bits.push(REPEAT_LABELS[node.repeat] ?? 'Repeats');
 
   return (
     <Pressable

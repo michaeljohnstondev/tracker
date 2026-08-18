@@ -23,11 +23,21 @@ export default function GoalModal({ visible, initialHours, onClose, onSubmit }) 
   const save = useCallback(() => {
     const hours = parseFloat(text);
     if (!Number.isFinite(hours) || hours <= 0) {
-      VibeAlert('Invalid goal', 'Enter a number of hours greater than 0.');
+      VibeAlert(
+        'Invalid goal',
+        'Enter a number of hours greater than 0.',
+        [],
+        'warning'
+      );
       return;
     }
     if (hours > 168) {
-      VibeAlert('That is a long goal', 'Enter something under a week (168 hours).');
+      VibeAlert(
+        'That is a long goal',
+        'Enter something under a week (168 hours).',
+        [],
+        'warning'
+      );
       return;
     }
     // Rounded to the minute, so 0.333 doesn't become an unreadable timestamp.

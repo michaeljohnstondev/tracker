@@ -8,6 +8,7 @@ import { AuthProvider } from './src/store/AuthContext';
 import { NodeProvider, useNodes } from './src/store/NodeContext';
 import NodeScreen from './src/screens/NodeScreen';
 import UpdateBanner from './src/components/ui/UpdateBanner';
+import { VibeAlertHost } from './src/components/ui/VibeAlert';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { useAppUpdate } from './src/lib/useAppUpdate';
 
@@ -80,6 +81,10 @@ export default function App() {
           </ErrorBoundary>
           {/* Last child so it floats above the screen rather than under it. */}
           <UpdateBanner visible={isUpdateReady} onRestart={applyUpdate} />
+          {/* Outside the error boundary: an alert reporting a failure has to
+              survive whatever failed, and alerts fire from services and stores
+              as well as screens. */}
+          <VibeAlertHost />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

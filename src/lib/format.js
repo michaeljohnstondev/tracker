@@ -63,10 +63,29 @@ export function periodStart(repeat, at = Date.now()) {
   return d.getTime();
 }
 
-/** True when a repeating item was completed in an earlier period. */
+/**
+ * True when a repeating item was completed in an earlier period.
+ *
+ * 'always' has no period, so nothing about it is ever stale. It means the item
+ * is permanent — Clear leaves it alone and it stays ticked until you untick it
+ * yourself — rather than that it comes back on a schedule.
+ */
 export function isStale(item) {
-  if (!item?.repeat || !item.done) return false;
+  if (!item?.repeat || item.repeat === 'always' || !item.done) return false;
   return (item.doneAt ?? 0) < periodStart(item.repeat);
+}
+
+/**
+ * True when a counter on a repeating item was last touched in an earlier
+ * period — so today's reps start from zero.
+ *
+ * Deliberately not tied to `done`: you count without ever ticking the item off,
+ * and a tally that carried over from yesterday would be worse than useless.
+ */
+export function isCountStale(item) {
+  if (!item?.repeat || item.repeat === 'always') return false;
+  if (item.count == null || item.count === 0) return false;
+  return (item.countedAt ?? 0) < periodStart(item.repeat);
 }
 
 // Resolve a stored color name (e.g. 'vibeBlue') to its hex, with a

@@ -67,6 +67,8 @@ function toRemote(node, rootId) {
     note: node.note ?? '',
     startMs: node.startMs ?? null,
     goalHours: node.goalHours ?? null,
+    count: node.count ?? null,
+    countedAt: node.countedAt ?? null,
     repeat: node.repeat ?? null,
     reminders: node.reminders ?? [],
   };

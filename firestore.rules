@@ -45,16 +45,27 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/memberships/$(membershipId(rootId)));
     }
 
+    // The exists() guard is not belt and braces. get() on a missing document
+    // is an evaluation error, not a false — and an error aborts the whole
+    // expression rather than falling through to the next || branch. A tree
+    // whose root has been deleted would therefore fail every check that
+    // mentions ownership, including ones it isn't part of.
     function ownsTree(rootId) {
       return signedIn()
+        && exists(/databases/$(database)/documents/trees/$(rootId)/nodes/$(rootId))
         && get(/databases/$(database)/documents/trees/$(rootId)/nodes/$(rootId)).data.ownerUid == uid();
     }
 
     // An invite code is the shared secret; holding one that points at this
     // tree is what authorizes joining it.
-    function inviteGrants(rootId, code) {
-      return exists(/databases/$(database)/documents/invites/$(code))
-        && get(/databases/$(database)/documents/invites/$(code)).data.rootId == rootId;
+    //
+    // Joining by email carries no code at all, so the field has to be checked
+    // for before it's read: naming a key that isn't there is an evaluation
+    // error, which would take down the surrounding expression with it.
+    function inviteGrants(rootId) {
+      return 'usedInviteCode' in request.resource.data
+        && exists(/databases/$(database)/documents/invites/$(request.resource.data.usedInviteCode))
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.usedInviteCode)).data.rootId == rootId;
     }
 
     // Or you were invited by email. The invitation is keyed by the address it
@@ -108,9 +119,11 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.uid == uid()
         && docId == membershipId(request.resource.data.rootId)
-        && (ownsTree(request.resource.data.rootId)
-            || invitedByEmail(request.resource.data.rootId)
-            || inviteGrants(request.resource.data.rootId, request.resource.data.usedInviteCode));
+        // Cheapest and safest first: an email invitation is one exists() and
+        // cannot error, while ownership has a document to read.
+        && (invitedByEmail(request.resource.data.rootId)
+            || ownsTree(request.resource.data.rootId)
+            || inviteGrants(request.resource.data.rootId));
 
       // Leaving is deleting your own row; an owner may also remove someone.
       allow delete: if signedIn()

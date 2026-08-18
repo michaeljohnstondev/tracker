@@ -71,7 +71,9 @@ export default function ItemReminders({ value = [], onChange }) {
       if (at <= Date.now()) {
         VibeAlert(
           'That time has passed',
-          'Pick a moment in the future, or the alarm would never go off.'
+          'Pick a moment in the future, or the alarm would never go off.',
+          [],
+          'warning'
         );
         return;
       }

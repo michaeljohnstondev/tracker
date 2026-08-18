@@ -4,15 +4,13 @@ import {
   Text,
   StyleSheet,
   Pressable,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
   AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  ScrollViewContainer,
-  NestedReorderableList,
-} from 'react-native-reorderable-list';
+import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
@@ -31,8 +29,8 @@ import { useNodes } from '../store/NodeContext';
 import { useAuth } from '../store/AuthContext';
 import { ensurePushPermission } from '../services/fcm';
 import { syncNodeReminders, syncGoalReminder } from '../services/reminders';
-import { resolveColor, fmtElapsed, isStale } from '../lib/format';
-import { hasTimer as nodeHasTimer } from '../lib/nodes';
+import { resolveColor, fmtElapsed, isStale, isCountStale } from '../lib/format';
+import { hasTimer as nodeHasTimer, hasCounter as nodeHasCounter } from '../lib/nodes';
 import { useNow } from '../lib/useNow';
 
 const fmtGoal = (hours) => {
@@ -103,6 +101,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   useEffect(() => {
     children.filter(isStale).forEach((child) => {
       updateNode(child, { done: false, doneAt: null, doneBy: null });
+    });
+    // A tally resets on its own schedule, whether or not the item was ever
+    // ticked — yesterday's reps aren't today's.
+    children.filter(isCountStale).forEach((child) => {
+      updateNode(child, { count: 0, countedAt: Date.now() });
     });
   }, [children, updateNode]);
 
@@ -257,6 +260,10 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
         applyTimer({ goalHours: 1 });
         return;
       }
+      if (kind === 'counter') {
+        updateNode(node, { count: 0, countedAt: Date.now() });
+        return;
+      }
       if (kind === 'repeat') {
         updateNode(node, { repeat: 'daily' });
         return;
@@ -264,6 +271,19 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
       setRevealed((r) => ({ ...r, [kind]: true }));
     },
     [applyTimer, updateNode, node]
+  );
+
+  // Never below zero: a negative rep count is nothing, and the guard is
+  // cheaper than explaining it.
+  const bumpCount = useCallback(
+    (delta) => {
+      if (!node) return;
+      updateNode(node, {
+        count: Math.max(0, (node.count ?? 0) + delta),
+        countedAt: Date.now(),
+      });
+    },
+    [node, updateNode]
   );
   // Only what Clear would actually remove. Repeating items are ticked off
   // rather than finished — they come back on their own — so deleting one
@@ -299,65 +319,60 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        <ScrollViewContainer
-          // Without a height of its own a ScrollView grows to fit its content
-          // and decides there is nothing to scroll — the list just runs off the
-          // bottom of the screen, taking the Add button with it. Only shows up
-          // once something holds more than a screenful.
-          style={styles.flex}
-          // The list's own padding is dropped while empty, or it offsets the
-          // centred message downward by the difference between top and bottom.
-          contentContainerStyle={[
-            styles.list,
-            loaded && isContainer && children.length === 0 && styles.listEmpty,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Not rendered while empty. An empty list still occupies the space
-              it would have taken, which pushed the message below it to the
-              bottom of the screen instead of the middle. */}
-          {isContainer && children.length > 0 && (
-            <NestedReorderableList
-              data={children}
-              // The list has no height of its own — it grows to fit and the
-              // container above does the scrolling. Saying so twice is not
-              // redundant: `scrollable` tells the library which view to
-              // auto-scroll while dragging, while `scrollEnabled` stops the
-              // inner list swallowing a drag it has nowhere to put.
-              scrollable={false}
-              scrollEnabled={false}
-              keyExtractor={(child) => child.id}
-              onReorder={({ from, to }) => reorderChildren(node?.id ?? null, from, to)}
-              renderItem={({ item: child, index }) => (
-                <NodeCard
-                  node={child}
-                  index={index}
-                  childCount={childCounts[child.id] ?? 0}
-                  onPress={() => onOpen(child.id)}
-                  onHold={() => onOpen(child.id)}
-                  onToggle={() => toggleDone(child)}
-                />
-              )}
-            />
-          )}
-
-          {/* Same wording wherever you are — an empty category and an empty
-              home screen are the same situation, and the prompt is the useful
-              part of the message. Only containers can be empty in this sense;
-              an item holds nothing by design. */}
-          {isContainer && loaded && children.length === 0 && (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.empty}>
-                Nothing yet.{'\n'}Add something to get started.
-              </Text>
-            </View>
-          )}
-
-          {/* Only what this item actually carries. Everything else is added
-              deliberately from the Add button, so a plain line of text stays a
-              plain line of text. */}
-          {hasDetails && (
+        {/* A screen is one thing or the other — a container's children, or an
+            item's details — so each gets the scroller that suits it. The list
+            used to be a NestedReorderableList inside a ScrollViewContainer,
+            which is what you need when a list shares a screen with other
+            content. Nothing here ever does, and a virtualized list nested in a
+            scroll view had no idea how tall it was: past a screenful the rest
+            simply couldn't be reached. */}
+        {isContainer ? (
+          <ReorderableList
+            style={styles.flex}
+            data={children}
+            keyExtractor={(child) => child.id}
+            onReorder={({ from, to }) => reorderChildren(node?.id ?? null, from, to)}
+            // The list's own padding is dropped while empty, or it offsets the
+            // centred message by the difference between top and bottom.
+            contentContainerStyle={[
+              styles.list,
+              loaded && children.length === 0 && styles.listEmpty,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item: child, index }) => (
+              <NodeCard
+                node={child}
+                index={index}
+                childCount={childCounts[child.id] ?? 0}
+                onPress={() => onOpen(child.id)}
+                onHold={() => onOpen(child.id)}
+                onToggle={() => toggleDone(child)}
+              />
+            )}
+            // Same wording wherever you are — an empty category and an empty
+            // home screen are the same situation, and the prompt is the useful
+            // part of the message.
+            ListEmptyComponent={
+              loaded ? (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.empty}>
+                    Nothing yet.{'\n'}Add something to get started.
+                  </Text>
+                </View>
+              ) : null
+            }
+          />
+        ) : (
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Only what this item actually carries. Everything else is added
+                deliberately from the Add button, so a plain line of text stays
+                a plain line of text. */}
             <View style={styles.details}>
               {showNote && (
                 <>
@@ -384,6 +399,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                       { value: null, label: 'Never' },
                       { value: 'daily', label: 'Daily' },
                       { value: 'weekly', label: 'Weekly' },
+                      // No period of its own: this one is permanent. Clear
+                      // leaves it alone and it stays ticked until you untick
+                      // it, which is what you want for a standing item that
+                      // isn't on a schedule.
+                      { value: 'always', label: 'Always' },
                     ].map((option) => (
                       <VibeButton
                         key={option.label}
@@ -434,6 +454,64 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                 </>
               )}
 
+              {nodeHasCounter(node) && (
+                <>
+                  <Text style={styles.label}>Counter</Text>
+                  <View style={styles.counterBox}>
+                    <View style={styles.counterRow}>
+                      <Pressable
+                        onPress={() => bumpCount(-1)}
+                        style={({ pressed }) => [
+                          styles.counterKey,
+                          pressed && styles.counterKeyDown,
+                        ]}
+                        // Held down to walk a miscount back quickly, rather
+                        // than tapping fifteen times.
+                        onLongPress={() => bumpCount(-5)}
+                        delayLongPress={400}
+                      >
+                        <Text style={styles.counterKeyLabel}>−</Text>
+                      </Pressable>
+
+                      <Text style={styles.count}>{node.count ?? 0}</Text>
+
+                      <Pressable
+                        onPress={() => bumpCount(1)}
+                        style={({ pressed }) => [
+                          styles.counterKey,
+                          pressed && styles.counterKeyDown,
+                        ]}
+                        onLongPress={() => bumpCount(5)}
+                        delayLongPress={400}
+                      >
+                        <Text style={styles.counterKeyLabel}>+</Text>
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.counterLinks}>
+                      {(node.count ?? 0) > 0 && (
+                        <Pressable
+                          onPress={() =>
+                            updateNode(node, { count: 0, countedAt: Date.now() })
+                          }
+                          hitSlop={8}
+                        >
+                          <Text style={styles.subtleLink}>Reset</Text>
+                        </Pressable>
+                      )}
+                      <Pressable
+                        onPress={() =>
+                          updateNode(node, { count: null, countedAt: null })
+                        }
+                        hitSlop={8}
+                      >
+                        <Text style={styles.subtleLink}>Remove counter</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </>
+              )}
+
               {showReminders && (
                 <>
                   <Text style={styles.label}>Reminders</Text>
@@ -441,8 +519,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                 </>
               )}
             </View>
-          )}
-        </ScrollViewContainer>
+          </ScrollView>
+        )}
 
         {hasDetails && (
           <View style={styles.footer}>
@@ -576,7 +654,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontFamily: theme.fonts.main,
   },
-  details: { marginTop: 26 },
+  // No longer sits under a list, so it doesn't need to be pushed clear of one.
+  details: {},
   label: {
     color: theme.colors.textSecondary,
     fontSize: 13,
@@ -622,6 +701,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
+    textDecorationLine: 'underline',
+    fontFamily: theme.fonts.main,
+  },
+  counterBox: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderWidth: 3,
+    borderColor: theme.colors.vibeBlue,
+    borderRadius: theme.sizes.borderRadius,
+    padding: 16,
+  },
+  counterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  // Big and square: this gets tapped repeatedly, often mid-set and without
+  // looking properly at the screen.
+  counterKey: {
+    width: 68,
+    height: 68,
+    borderRadius: theme.sizes.borderRadius,
+    borderWidth: 2,
+    borderColor: theme.colors.vibeBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  counterKeyDown: { backgroundColor: theme.colors.vibeBlue },
+  counterKeyLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 32,
+    fontWeight: '300',
+    lineHeight: 38,
+    fontFamily: theme.fonts.main,
+  },
+  count: {
+    flex: 1,
+    color: theme.colors.textPrimary,
+    fontSize: 48,
+    fontWeight: '200',
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+    fontFamily: theme.fonts.main,
+  },
+  counterLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 12,
+  },
+  subtleLink: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
     textDecorationLine: 'underline',
     fontFamily: theme.fonts.main,
   },

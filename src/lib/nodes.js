@@ -16,7 +16,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *   done/doneAt/doneBy   if it has been ticked
  *   note        free text
  *   startMs, goalHours   a running timer and its target
- *   repeat      'daily' | 'weekly' | null
+ *   count, countedAt     a tally, and when it last moved
+ *   repeat      'daily' | 'weekly' | 'always' | null
  *   reminders[] absolute timestamps to be alarmed at
  *   shared, remoteId, rootId   set once it lives in Firestore
  */
@@ -70,6 +71,10 @@ export function makeNode({
     note: '',
     startMs: null,
     goalHours: null,
+    // null means no counter at all, rather than a counter sitting at zero —
+    // otherwise every item would have one.
+    count: null,
+    countedAt: null,
     repeat: null,
     reminders: [],
     ...rest,
@@ -110,6 +115,8 @@ export function filingTargets(nodes, node) {
 }
 
 export const hasTimer = (node) => node?.goalHours != null || node?.startMs != null;
+
+export const hasCounter = (node) => node?.count != null;
 
 // ---- Persistence ---------------------------------------------------------
 

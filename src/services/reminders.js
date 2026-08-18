@@ -115,7 +115,9 @@ export async function syncNodeReminders({ node, uid, previous = [], reminders = 
     console.error('[reminders] node sync FAILED:', err?.message || err);
     VibeAlert(
       'Reminder not scheduled',
-      `Saved, but the reminder could not be stored.\n\n${err?.message || err}`
+      `Saved, but the reminder could not be stored.\n\n${err?.message || err}`,
+      [],
+      'warning'
     );
   }
 }
@@ -179,7 +181,9 @@ export async function syncItemReminders({ tracker, item, uid, previous = [], rem
     console.error('[reminders] sync FAILED:', err?.message || err);
     VibeAlert(
       'Reminder not scheduled',
-      `The item saved, but its reminder could not be stored.\n\n${err?.message || err}`
+      `The item saved, but its reminder could not be stored.\n\n${err?.message || err}`,
+      [],
+      'warning'
     );
   }
 }
