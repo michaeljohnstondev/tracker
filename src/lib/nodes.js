@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *   note        free text
  *   startMs, goalHours   a running timer and its target
  *   count, countedAt     a tally, and when it last moved
+ *   dueAt, dueTo         when it's due, and which list should surface it then
  *   repeat      'daily' | 'weekly' | 'always' | null
  *   reminders[] absolute timestamps to be alarmed at
  *   shared, remoteId, rootId   set once it lives in Firestore
@@ -75,6 +76,11 @@ export function makeNode({
     // otherwise every item would have one.
     count: null,
     countedAt: null,
+    // A due item is shown by another list rather than moved into it. Moving
+    // would throw away where it actually belongs, and there'd be nowhere to
+    // put it back once it was done.
+    dueAt: null,
+    dueTo: null,
     repeat: null,
     reminders: [],
     ...rest,
@@ -117,6 +123,34 @@ export function filingTargets(nodes, node) {
 export const hasTimer = (node) => node?.goalHours != null || node?.startMs != null;
 
 export const hasCounter = (node) => node?.count != null;
+
+// The home screen has no node of its own, so it needs a name to be picked as
+// a destination. Anything else is an ordinary node id.
+export const DUE_HOME = '__home__';
+
+/** Where this screen sits, in the terms `dueTo` is written in. */
+export const dueKeyFor = (node) => node?.id ?? DUE_HOME;
+
+/**
+ * Items another list should be showing right now.
+ *
+ * Only once they're actually due, never the ones already living here, and
+ * never the ones already done — the point is a list that fills up as things
+ * come due and empties as you deal with them.
+ */
+export function dueVisitorsFor(nodes, node, at = Date.now()) {
+  const here = dueKeyFor(node);
+  return nodes
+    .filter(
+      (n) =>
+        n.dueTo === here &&
+        n.dueAt != null &&
+        n.dueAt <= at &&
+        !n.done &&
+        (n.parentId ?? DUE_HOME) !== here
+    )
+    .sort((a, b) => a.dueAt - b.dueAt);
+}
 
 // ---- Persistence ---------------------------------------------------------
 

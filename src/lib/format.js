@@ -45,6 +45,51 @@ export function fmtRemaining(elapsedMs, goalMs) {
 }
 
 /**
+ * When a running timer reaches its goal, said the way you'd say it out loud.
+ *
+ * The day is named only when it isn't today, because "ends at 4:35 PM" is the
+ * answer to the question nearly every time and a date in front of it is just
+ * something to read past. A fast that runs past midnight genuinely needs it.
+ */
+export function fmtEndTime(endMs, now = Date.now()) {
+  if (!endMs) return null;
+
+  const end = new Date(endMs);
+  const time = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const days = Math.floor((endMs - midnight.getTime()) / 86400000);
+
+  if (days <= 0) return time;
+  if (days === 1) return `${time} tomorrow`;
+  if (days < 7) return `${time} ${end.toLocaleDateString([], { weekday: 'long' })}`;
+  return `${time} ${end.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+}
+
+/**
+ * A due date, in the terms you'd think about it.
+ *
+ * Overdue comes first and says so plainly, because that's the one that changes
+ * what you do next.
+ */
+export function fmtDue(dueAt, now = Date.now()) {
+  if (!dueAt) return null;
+
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+  const days = Math.floor((dueAt - midnight.getTime()) / 86400000);
+  const due = new Date(dueAt);
+  const time = due.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  if (dueAt < now) return days < 0 ? 'Overdue' : `Due ${time}`;
+  if (days === 0) return `Due ${time}`;
+  if (days === 1) return `Due tomorrow ${time}`;
+  if (days < 7) return `Due ${due.toLocaleDateString([], { weekday: 'long' })}`;
+  return `Due ${due.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+}
+
+/**
  * Start of the current repeat period, as a timestamp.
  *
  * A daily item resets at local midnight and a weekly one on Monday morning,

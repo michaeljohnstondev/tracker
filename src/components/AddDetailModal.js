@@ -17,6 +17,7 @@ export default function AddDetailModal({ visible, node, onClose, onPick }) {
     { key: 'note', icon: '📝', label: 'Note', hide: !!node?.note },
     { key: 'timer', icon: '⏱', label: 'Timer', hide: node?.goalHours != null || node?.startMs != null },
     { key: 'counter', icon: '🔢', label: 'Counter', hide: node?.count != null },
+    { key: 'due', icon: '📅', label: 'Due date', hide: node?.dueAt != null },
     { key: 'reminder', icon: '🔔', label: 'Reminder' },
     { key: 'repeat', icon: '🔁', label: 'Repeat', hide: !!node?.repeat },
   ].filter((option) => !option.hide);

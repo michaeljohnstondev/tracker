@@ -29,8 +29,23 @@ import { useNodes } from '../store/NodeContext';
 import { useAuth } from '../store/AuthContext';
 import { ensurePushPermission } from '../services/fcm';
 import { syncNodeReminders, syncGoalReminder } from '../services/reminders';
-import { resolveColor, fmtElapsed, isStale, isCountStale } from '../lib/format';
-import { hasTimer as nodeHasTimer, hasCounter as nodeHasCounter } from '../lib/nodes';
+import {
+  resolveColor,
+  fmtElapsed,
+  fmtEndTime,
+  isStale,
+  isCountStale,
+} from '../lib/format';
+import CloseButton from '../components/ui/CloseButton';
+import {
+  hasTimer as nodeHasTimer,
+  hasCounter as nodeHasCounter,
+  dueVisitorsFor,
+  dueKeyFor,
+  DUE_HOME,
+} from '../lib/nodes';
+import ItemDue from '../components/ItemDue';
+import { NodeCardView } from '../components/NodeCard';
 import { useNow } from '../lib/useNow';
 
 const fmtGoal = (hours) => {
@@ -81,6 +96,32 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     () => childrenFor(node?.id ?? null),
     [childrenFor, node]
   );
+
+  // Items that live elsewhere but have come due and named this list as where
+  // they should show up.
+  //
+  // Evaluated when you look at the list, like the repeat logic and for the
+  // same reason: there's no background process to lean on, and the only moment
+  // this has to be right is when it's on screen.
+  const visitors = useMemo(
+    () =>
+      isRoot || node?.kind === 'category' ? dueVisitorsFor(nodes, node) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodes, node?.id, node?.kind, isRoot]
+  );
+
+  // Somewhere for a due item to surface. Categories only — an item has no
+  // list to show anything in — and never the one it already lives in.
+  const dueTargets = useMemo(() => {
+    if (!node) return [];
+    const home = { id: DUE_HOME, name: 'Home' };
+    const categories = nodes
+      .filter((n) => n.kind === 'category' && n.id !== node.id)
+      .map((n) => ({ id: n.id, name: n.name }));
+    return [home, ...categories].filter(
+      (t) => t.id !== (node.parentId ?? DUE_HOME)
+    );
+  }, [nodes, node]);
 
   // Counting grandchildren so a card can say "3 inside" without each row
   // having to scan the whole tree itself.
@@ -215,6 +256,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const elapsedMs = running ? now - node.startMs : 0;
   const goalMs = (node?.goalHours || 0) * 3600 * 1000;
   const reachedGoal = goalMs > 0 && elapsedMs >= goalMs;
+  const endsAt = running && goalMs > 0 ? fmtEndTime(node.startMs + goalMs, now) : null;
 
   const applyTimer = useCallback(
     (patch) => {
@@ -313,6 +355,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
         updateNode(node, { repeat: 'daily' });
         return;
       }
+      if (kind === 'due') {
+        // Today, so the section has something to show and can be corrected,
+        // rather than opening onto an empty field.
+        updateNode(node, { dueAt: Date.now(), dueTo: null });
+        return;
+      }
       setRevealed((r) => ({ ...r, [kind]: true }));
     },
     [applyTimer, updateNode, node]
@@ -385,6 +433,27 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            // Above the list's own items, under a heading that says where they
+            // came from — they belong to other lists and are only passing
+            // through. NodeCardView rather than NodeCard: the drag hooks only
+            // work inside a reorderable cell, and a header isn't one. These
+            // aren't draggable anyway, since their order lives elsewhere.
+            ListHeaderComponent={
+              visitors.length ? (
+                <View style={styles.visitors}>
+                  <Text style={styles.label}>Due now</Text>
+                  {visitors.map((visitor) => (
+                    <NodeCardView
+                      key={visitor.id}
+                      node={visitor}
+                      childCount={childCounts[visitor.id] ?? 0}
+                      onPress={() => onOpen(visitor.id)}
+                      onToggle={() => toggleDone(visitor)}
+                    />
+                  ))}
+                </View>
+              ) : null
+            }
             renderItem={({ item: child, index }) => (
               <NodeCard
                 node={child}
@@ -467,33 +536,46 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                 <>
                   <Text style={styles.label}>Timer</Text>
                   <View style={styles.timerBox}>
-                  <Text
-                    style={[
-                      styles.elapsed,
-                      reachedGoal && { color: theme.colors.vibeGreen },
-                    ]}
-                  >
-                    {fmtElapsed(elapsedMs)}
-                  </Text>
-                  <Pressable onPress={() => setGoalOpen(true)} hitSlop={8}>
-                    <Text style={styles.goalLine}>
-                      Goal {fmtGoal(node.goalHours)} ✎
-                    </Text>
-                  </Pressable>
-                  <View style={styles.timerActions}>
-                    <VibeButton
-                      label={running ? 'Stop' : 'Start'}
-                      variant={running ? 'red' : 'green'}
-                      onPress={() =>
-                        applyTimer({ startMs: running ? null : Date.now() })
-                      }
-                    />
-                    <Pressable
+                    <CloseButton
                       onPress={() => applyTimer({ startMs: null, goalHours: null })}
-                      hitSlop={8}
+                      style={styles.boxClose}
+                    />
+                    <Text
+                      style={[
+                        styles.elapsed,
+                        reachedGoal && { color: theme.colors.vibeGreen },
+                      ]}
                     >
-                      <Text style={styles.removeTimer}>Remove timer</Text>
+                      {fmtElapsed(elapsedMs)}
+                    </Text>
+                    <Pressable onPress={() => setGoalOpen(true)} hitSlop={8}>
+                      <Text style={styles.goalLine}>
+                        Goal {fmtGoal(node.goalHours)} ✎
+                      </Text>
                     </Pressable>
+
+                    {/* The answer to the question you'd otherwise work out on
+                        your fingers. Only once it's running, since before that
+                        there's no end to name. */}
+                    {endsAt && (
+                      <Text
+                        style={[
+                          styles.endsAt,
+                          reachedGoal && { color: theme.colors.vibeGreen },
+                        ]}
+                      >
+                        {reachedGoal ? `Goal reached at ${endsAt}` : `Ends at ${endsAt}`}
+                      </Text>
+                    )}
+
+                    <View style={styles.timerActions}>
+                      <VibeButton
+                        label={running ? 'Stop' : 'Start'}
+                        variant={running ? 'red' : 'green'}
+                        onPress={() =>
+                          applyTimer({ startMs: running ? null : Date.now() })
+                        }
+                      />
                     </View>
                   </View>
                 </>
@@ -503,6 +585,10 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                 <>
                   <Text style={styles.label}>Counter</Text>
                   <View style={styles.counterBox}>
+                    <CloseButton
+                      onPress={() => updateNode(node, { count: null, countedAt: null })}
+                      style={styles.boxClose}
+                    />
                     <View style={styles.counterRow}>
                       <Pressable
                         onPress={() => bumpCount(-1)}
@@ -533,8 +619,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                       </Pressable>
                     </View>
 
-                    <View style={styles.counterLinks}>
-                      {(node.count ?? 0) > 0 && (
+                    {(node.count ?? 0) > 0 && (
+                      <View style={styles.counterLinks}>
                         <Pressable
                           onPress={() =>
                             updateNode(node, { count: 0, countedAt: Date.now() })
@@ -543,16 +629,26 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                         >
                           <Text style={styles.subtleLink}>Reset</Text>
                         </Pressable>
-                      )}
-                      <Pressable
-                        onPress={() =>
-                          updateNode(node, { count: null, countedAt: null })
-                        }
-                        hitSlop={8}
-                      >
-                        <Text style={styles.subtleLink}>Remove counter</Text>
-                      </Pressable>
-                    </View>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
+              {node.dueAt != null && (
+                <>
+                  <Text style={styles.label}>Due</Text>
+                  <View>
+                    <CloseButton
+                      onPress={() => updateNode(node, { dueAt: null, dueTo: null })}
+                      style={styles.boxClose}
+                    />
+                    <ItemDue
+                      dueAt={node.dueAt}
+                      dueTo={node.dueTo}
+                      targets={dueTargets}
+                      onChange={(patch) => updateNode(node, patch)}
+                    />
                   </View>
                 </>
               )}
@@ -692,6 +788,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
   },
+  // The first label on the screen shouldn't be pushed down the way one
+  // separating two sections is.
+  visitors: { marginTop: -10 },
   empty: {
     color: theme.colors.textSecondary,
     fontSize: 16,
@@ -741,13 +840,20 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.main,
   },
   timerActions: { alignSelf: 'stretch', marginTop: 14 },
-  removeTimer: {
+  endsAt: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 14,
     marginTop: 8,
-    textDecorationLine: 'underline',
+    fontVariant: ['tabular-nums'],
     fontFamily: theme.fonts.main,
+  },
+  // Sits over the corner rather than in the flow, so removing something never
+  // shifts what's being read.
+  boxClose: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    zIndex: 1,
   },
   counterBox: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',

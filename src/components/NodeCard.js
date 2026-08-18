@@ -6,7 +6,7 @@ import {
   useReorderableDragEnd,
 } from 'react-native-reorderable-list';
 import theme from '../theme/themes';
-import { fmtElapsedShort, resolveColor } from '../lib/format';
+import { fmtElapsedShort, fmtDue, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
 
 const REPEAT_LABELS = { daily: 'Daily', weekly: 'Weekly', always: 'Always' };
@@ -29,6 +29,8 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
   const bits = [];
   if (running) bits.push(fmtElapsedShort(elapsed));
   else if (node.goalHours) bits.push(`${node.goalHours}h goal`);
+  const due = fmtDue(node.dueAt);
+  if (due) bits.push(due);
   if (node.count != null) bits.push(`Count ${node.count}`);
   if (childCount) bits.push(`${childCount} inside`);
   if (node.repeat) bits.push(REPEAT_LABELS[node.repeat] ?? 'Repeats');
