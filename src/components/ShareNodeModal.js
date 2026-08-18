@@ -7,13 +7,15 @@ import {
   Pressable,
   Share,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import theme from '../theme/themes';
 import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
 import { useNodes } from '../store/NodeContext';
-import { createInvite } from '../services/nodes';
+import VibeInput from './ui/VibeInput';
+import { createInvite, shareWithEmail } from '../services/nodes';
 import { ensurePushPermission } from '../services/fcm';
 
 // Sign in, publish, hand over a code — one flow, one sheet. Splitting them
@@ -28,11 +30,15 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
   // copy at that moment — the shared one only exists once the subscription
   // delivers it — so the sheet tracks the new id itself.
   const [publishedRoot, setPublishedRoot] = useState(null);
+  const [email, setEmail] = useState('');
+  const [invited, setInvited] = useState(null);
 
   useEffect(() => {
     if (!visible) {
       setCode(null);
       setPublishedRoot(null);
+      setEmail('');
+      setInvited(null);
     }
   }, [visible]);
 
@@ -65,6 +71,28 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
       VibeAlert('Could not share', e?.message ?? 'Please try again.');
     }
   }, [shareNode, node, user, onPublished]);
+
+  const handleEmailInvite = useCallback(async () => {
+    if (!rootId || !user?.uid) {
+      VibeAlert('Not shared yet', 'Share this first, then invite someone.');
+      return;
+    }
+    setWorking(true);
+    try {
+      await shareWithEmail({
+        rootId,
+        email,
+        fromUid: user.uid,
+        treeName: node?.name ?? '',
+      });
+      setInvited(email.trim());
+      setEmail('');
+    } catch (e) {
+      VibeAlert('Could not invite', e?.message ?? 'Please try again.');
+    } finally {
+      setWorking(false);
+    }
+  }, [email, rootId, user, node]);
 
   const handleInvite = useCallback(async () => {
     // Belt and braces: without a root there's nothing to invite anyone to, and
@@ -104,6 +132,9 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <Pressable style={styles.overlay} onPress={handleClose}>
+        {/* The sheet sits on the bottom edge, which is exactly where the
+            keyboard opens — without this the email field is typed into blind. */}
+        <KeyboardAvoidingView behavior="padding">
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title}>Share “{node?.name}”</Text>
 
@@ -145,21 +176,52 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
           {user && isShared && (
             <>
               <Text style={styles.body}>
-                {code
-                  ? 'Give them this code — it works once they enter it in Tracker.'
-                  : 'This is shared. Create a code to invite someone.'}
+                {invited
+                  ? `Sent to ${invited}. It’ll appear in their Tracker as soon ` +
+                    `as they sign in with that address — no code to type.`
+                  : 'Invite someone by their email address. It just shows up ' +
+                    'in their app.'}
               </Text>
 
-              {code && <Text style={styles.code}>{code}</Text>}
+              <VibeInput
+                placeholder="their@email.com"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (invited) setInvited(null);
+                }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="emailAddress"
+                style={styles.email}
+                onSubmitEditing={handleEmailInvite}
+                returnKeyType="send"
+              />
 
               <View style={styles.actions}>
                 <VibeButton
-                  label={code ? 'Send code again' : 'Create invite code'}
+                  label="Send invite"
                   variant="green"
-                  onPress={handleInvite}
-                  disabled={spinner}
+                  onPress={handleEmailInvite}
+                  disabled={spinner || !email.trim()}
                 />
               </View>
+
+              {/* Still here for anyone whose address you don't have — read out
+                  over the phone, or sent however you like. */}
+              {code ? (
+                <>
+                  <Text style={styles.code}>{code}</Text>
+                  <Pressable onPress={handleInvite} hitSlop={8} disabled={spinner}>
+                    <Text style={styles.link}>Send code again</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Pressable onPress={handleInvite} hitSlop={8} disabled={spinner}>
+                  <Text style={styles.link}>Or use an invite code</Text>
+                </Pressable>
+              )}
             </>
           )}
 
@@ -171,6 +233,7 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
             <Text style={styles.cancel}>Done</Text>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Pressable>
     </Modal>
   );
@@ -209,6 +272,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     fontVariant: ['tabular-nums'],
+    fontFamily: theme.fonts.main,
+  },
+  email: { marginTop: 18 },
+  link: {
+    color: theme.colors.vibeCyan,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
     fontFamily: theme.fonts.main,
   },
   actions: { marginTop: 22, alignItems: 'stretch' },

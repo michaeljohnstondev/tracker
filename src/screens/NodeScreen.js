@@ -300,6 +300,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
         keyboardVerticalOffset={8}
       >
         <ScrollViewContainer
+          // Without a height of its own a ScrollView grows to fit its content
+          // and decides there is nothing to scroll — the list just runs off the
+          // bottom of the screen, taking the Add button with it. Only shows up
+          // once something holds more than a screenful.
+          style={styles.flex}
           // The list's own padding is dropped while empty, or it offsets the
           // centred message downward by the difference between top and bottom.
           contentContainerStyle={[
@@ -312,7 +317,13 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
           {isContainer && (
             <NestedReorderableList
               data={children}
+              // The list has no height of its own — it grows to fit and the
+              // container above does the scrolling. Saying so twice is not
+              // redundant: `scrollable` tells the library which view to
+              // auto-scroll while dragging, while `scrollEnabled` stops the
+              // inner list swallowing a drag it has nowhere to put.
               scrollable={false}
+              scrollEnabled={false}
               keyExtractor={(child) => child.id}
               onReorder={({ from, to }) => reorderChildren(node?.id ?? null, from, to)}
               renderItem={({ item: child, index }) => (

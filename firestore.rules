@@ -7,6 +7,7 @@ rules_version = '2';
 // nodes/{nodeId}              a shared node, carrying rootId
 // memberships/{rootId}_{uid}  one doc per person per shared tree
 // invites/{code}              short random code -> rootId
+// shares/{rootId}_{email}     an invitation addressed to one person
 // reminders/{id}              a pending alarm, self-contained
 //
 // Everything in the app is a node, and sharing attaches to a node and takes
@@ -56,6 +57,15 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/invites/$(code)).data.rootId == rootId;
     }
 
+    // Or you were invited by email. The invitation is keyed by the address it
+    // was sent to, so the check is a path lookup against the signed-in user's
+    // own verified email — no directory of users to search, and nothing that
+    // would let one account discover another.
+    function invitedByEmail(rootId) {
+      return request.auth.token.email != null
+        && exists(/databases/$(database)/documents/shares/$(rootId + '_' + request.auth.token.email));
+    }
+
     // Readable by any signed-in user so a shared tree can show who ticked
     // something off; writable only by the person it describes.
     match /users/{userId} {
@@ -99,11 +109,32 @@ service cloud.firestore {
         && request.resource.data.uid == uid()
         && docId == membershipId(request.resource.data.rootId)
         && (ownsTree(request.resource.data.rootId)
+            || invitedByEmail(request.resource.data.rootId)
             || inviteGrants(request.resource.data.rootId, request.resource.data.usedInviteCode));
 
       // Leaving is deleting your own row; an owner may also remove someone.
       allow delete: if signedIn()
         && (resource.data.uid == uid() || ownsTree(resource.data.rootId));
+    }
+
+    // An invitation addressed to one person, keyed {rootId}_{email}.
+    //
+    // Readable only by the address it was sent to, and matched against the
+    // verified email in their sign-in token — so an invitation cannot be
+    // claimed by anyone else, and there is no way to search for who has an
+    // account.
+    match /shares/{docId} {
+      allow read: if signedIn() && resource.data.email == request.auth.token.email;
+
+      allow create: if signedIn()
+        && isMember(request.resource.data.rootId)
+        && docId == request.resource.data.rootId + '_' + request.resource.data.email;
+
+      // Cleared by the recipient once they've joined, or withdrawn by anyone
+      // already on the tree.
+      allow delete: if signedIn()
+        && (resource.data.email == request.auth.token.email
+            || isMember(resource.data.rootId));
     }
 
     // Codes are random and unguessable; reading one reveals only a rootId,

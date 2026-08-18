@@ -22,7 +22,7 @@ import VibeAlert from '../components/ui/VibeAlert';
 const NodeContext = createContext(null);
 
 export function NodeProvider({ children }) {
-  const { uid } = useAuth();
+  const { uid, user } = useAuth();
 
   const [localNodes, setLocalNodes] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -96,6 +96,39 @@ export function NodeProvider({ children }) {
       perTree.clear();
     };
   }, [uid]);
+
+  // Invitations sent to this address are taken up on sight.
+  //
+  // No accept step: someone put a shared list in front of you by name, and
+  // making you confirm it adds a decision without adding a choice — you can
+  // always leave. It also means it simply appears, which is the point.
+  const accepting = useRef(new Set());
+
+  useEffect(() => {
+    const email = user?.email;
+    if (!uid || !email) return undefined;
+
+    return remote.subscribeToInvitations(
+      email,
+      (invitations) => {
+        invitations.forEach(({ rootId }) => {
+          // The snapshot fires again the moment the membership lands, before
+          // the invitation has been cleared — so without this the same one is
+          // taken up twice.
+          if (accepting.current.has(rootId)) return;
+          accepting.current.add(rootId);
+
+          remote
+            .acceptInvitation({ rootId, email, uid })
+            .catch((err) => {
+              accepting.current.delete(rootId);
+              console.error('[nodes] accept failed:', err?.message || err);
+            });
+        });
+      },
+      (err) => console.error('[nodes] invitations:', err?.message || err)
+    );
+  }, [uid, user?.email]);
 
   const setFiledUnder = useCallback((nodeId, parentId) => {
     setFiling((prev) => {

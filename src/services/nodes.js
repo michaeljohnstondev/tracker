@@ -229,6 +229,60 @@ export async function redeemInvite(code, uid) {
   return rootId;
 }
 
+// ---- Invitations by email ------------------------------------------------
+
+// Addresses are stored lowercased so "Sam@x.com" and "sam@x.com" are the same
+// invitation — the id is derived from it, and the rules compare it against the
+// sign-in token, which is lowercase.
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+const shareId = (rootId, email) => `${rootId}_${normalizeEmail(email)}`;
+
+/**
+ * Invite someone by address, rather than by handing them a code.
+ *
+ * Deliberately does not look up whether they have an account: the invitation
+ * is keyed by the address and matched later against the recipient's own
+ * verified email. That means nothing here can be used to discover who has
+ * signed up, and an invitation left for someone works whether they join today
+ * or next week.
+ */
+export function shareWithEmail({ rootId, email, fromUid, treeName }) {
+  const normalized = normalizeEmail(email);
+  if (!normalized.includes('@')) throw new Error('That doesn’t look like an email address.');
+
+  return setDoc(doc(db, 'shares', shareId(rootId, normalized)), {
+    rootId,
+    email: normalized,
+    fromUid,
+    treeName: treeName ?? '',
+    createdAt: Date.now(),
+  });
+}
+
+/** Invitations waiting for this person. */
+export function subscribeToInvitations(email, onChange, onError) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return () => {};
+
+  return onSnapshot(
+    query(collection(db, 'shares'), where('email', '==', normalized)),
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...snapData(d) }))),
+    onError
+  );
+}
+
+/** Take up an invitation: join the tree, then clear it. */
+export async function acceptInvitation({ rootId, email, uid }) {
+  await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
+    rootId,
+    uid,
+    role: 'member',
+    joinedAt: Date.now(),
+  });
+  await deleteDoc(doc(db, 'shares', shareId(rootId, email)));
+}
+
 export function leaveTree(rootId, uid) {
   return deleteDoc(doc(db, 'memberships', membershipId(rootId, uid)));
 }
