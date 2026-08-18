@@ -216,20 +216,18 @@ export default function ListDetailScreen({
               </View>
             ) : null
           }
-          ListFooterComponent={
-            <Pressable onPress={() => setAddingChild(true)} hitSlop={8}>
-              <Text style={styles.addChild}>Add a category or timer here</Text>
-            </Pressable>
-          }
         />
 
-        {doneCount > 0 && (
-          <View style={styles.footer}>
+        {/* Same Add button as the home screen, in the same place — a container
+            is a container wherever you're standing. */}
+        <View style={styles.footer}>
+          {doneCount > 0 && (
             <Pressable onPress={clearDone} hitSlop={8}>
               <Text style={styles.clearDone}>Clear {doneCount} completed</Text>
             </Pressable>
-          </View>
-        )}
+          )}
+          <VibeButton label="Add" onPress={() => setAddingChild(true)} />
+        </View>
       </KeyboardAvoidingView>
 
       <ShareListModal
@@ -321,13 +319,6 @@ const styles = StyleSheet.create({
   children: {
     marginBottom: 6,
   },
-  addChild: {
-    color: theme.colors.vibeBlue,
-    fontSize: 15,
-    fontWeight: '600',
-    paddingVertical: 14,
-    fontFamily: theme.fonts.main,
-  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,13 +366,16 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 18,
   },
+  // Matches the home screen's footer, so the Add button sits identically
+  // wherever you are.
   footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 24,
+    paddingBottom: 8,
     paddingTop: 4,
-    alignItems: 'center',
   },
   clearDone: {
+    textAlign: 'center',
+    marginBottom: 10,
     color: theme.colors.textSecondary,
     fontSize: 14,
     textDecorationLine: 'underline',
