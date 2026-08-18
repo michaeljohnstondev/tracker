@@ -47,7 +47,7 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
 
             <Text style={styles.label}>Name</Text>
             <VibeInput
-              placeholder="e.g. Groceries, Fast, Return the modem"
+              placeholder="Name"
               value={name}
               onChangeText={setName}
               autoFocus
@@ -74,11 +74,6 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
                 style={styles.chip}
               />
             </View>
-            <Text style={styles.hint}>
-              Both can hold things inside them and carry a timer or a reminder.
-              The difference is that an item is something you tick off.
-            </Text>
-
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
               {NODE_COLORS.map((c) => (
@@ -140,13 +135,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontFamily: theme.fonts.main,
   },
-  hint: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 10,
-    fontFamily: theme.fonts.main,
-  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingVertical: 8, paddingHorizontal: 14 },
   colors: { flexDirection: 'row', gap: 12 },
@@ -154,12 +142,13 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: 'transparent',
   },
+  // Border only, no scale. Scaling pushed the selected swatch outside its own
+  // box, and the first one in the row had its ring clipped by the sheet edge.
   swatchSelected: {
     borderColor: theme.colors.white,
-    transform: [{ scale: 1.12 }],
   },
   actions: { marginTop: 26, alignItems: 'stretch' },
   cancel: {
