@@ -9,34 +9,14 @@ import {
   useReorderableDragEnd,
 } from 'react-native-reorderable-list';
 
-// One row on the home screen. Shows a live summary depending on type:
-//  - timer:  running elapsed + goal, or "Not started"
-//  - list:   "3 / 7 done"
-export default function TrackerCard({ tracker, index, onPress, onHold }) {
-  // Provided by the enclosing ReorderableList; starts a drag when called.
-  const drag = useReorderableDrag();
-
-  const hold = useCallback(() => onHold?.(), [onHold]);
-
-  // A long press that ends where it began wasn't a reorder — the card was held
-  // and released, which is taken as "do something with this one".
-  //
-  // This runs as a worklet on the UI thread: the library keeps the handlers in
-  // a reanimated shared value and calls them there. Touching React state
-  // directly from it crashes the app, so the hop back to JS is required, not
-  // decorative. The index guard matters because every cell is called, not just
-  // the one that moved.
-  const onDragEnd = useCallback(
-    (from, to) => {
-      'worklet';
-      if (from === to && from === index) {
-        runOnJS(hold)();
-      }
-    },
-    [index, hold]
-  );
-
-  useReorderableDragEnd(onDragEnd);
+/**
+ * The card itself, with no drag behaviour.
+ *
+ * Split out because the drag hooks only work inside a reorderable list's
+ * cells. Rendering the full card in a list header — where nested containers
+ * are shown — made those hooks blow up and the screen came out blank.
+ */
+export function TrackerCardView({ tracker, onPress, onLongPress }) {
   const color = resolveColor(tracker.color);
   const active = tracker.type === 'timer' && tracker.startMs != null;
   const now = useNow(active);
@@ -76,9 +56,9 @@ export default function TrackerCard({ tracker, index, onPress, onHold }) {
   return (
     <Pressable
       onPress={onPress}
-      onLongPress={drag}
-      // Below the default 500ms: a long-press to drag should feel like it
-      // catches, not like the app hesitated.
+      onLongPress={onLongPress}
+      // Below the default 500ms: a long-press should feel like it catches,
+      // not like the app hesitated.
       delayLongPress={220}
       style={({ pressed }) => [
         styles.card,
@@ -102,6 +82,39 @@ export default function TrackerCard({ tracker, index, onPress, onHold }) {
       </View>
       <Text style={styles.chevron}>›</Text>
     </Pressable>
+  );
+}
+
+/**
+ * A draggable card, for use inside a ReorderableList.
+ *
+ * Long-press starts a drag; a drag that ends where it began means the card was
+ * held and released, which opens the move sheet instead.
+ */
+export default function TrackerCard({ tracker, index, onPress, onHold }) {
+  // Provided by the enclosing list's cell; starts a drag when called.
+  const drag = useReorderableDrag();
+
+  const hold = useCallback(() => onHold?.(), [onHold]);
+
+  // Runs as a worklet on the UI thread: the library keeps these handlers in a
+  // reanimated shared value and calls them there. Touching React state from it
+  // crashes, so the hop back to JS is required rather than decorative. The
+  // index guard matters because every cell is called, not just the one moved.
+  const onDragEnd = useCallback(
+    (from, to) => {
+      'worklet';
+      if (from === to && from === index) {
+        runOnJS(hold)();
+      }
+    },
+    [index, hold]
+  );
+
+  useReorderableDragEnd(onDragEnd);
+
+  return (
+    <TrackerCardView tracker={tracker} onPress={onPress} onLongPress={drag} />
   );
 }
 

@@ -99,7 +99,7 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            <Text style={styles.title}>New Tracker</Text>
+            <Text style={styles.title}>Add</Text>
 
             <Text style={styles.label}>Name</Text>
             <VibeInput

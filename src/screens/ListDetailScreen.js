@@ -17,7 +17,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
 import RenameModal from '../components/RenameModal';
 import ListItemRow from '../components/ListItemRow';
-import TrackerCard from '../components/TrackerCard';
+import { TrackerCardView } from '../components/TrackerCard';
 import AddTrackerModal from '../components/AddTrackerModal';
 import MoveTrackerModal from '../components/MoveTrackerModal';
 import TrackerMenu from '../components/TrackerMenu';
@@ -204,11 +204,13 @@ export default function ListDetailScreen({
             children.length > 0 ? (
               <View style={styles.children}>
                 {children.map((child) => (
-                  <TrackerCard
+                  // The plain card: drag hooks only work inside the list's own
+                  // cells, and a header isn't one.
+                  <TrackerCardView
                     key={child.id}
                     tracker={child}
                     onPress={() => onOpenChild?.(child.id)}
-                    onHold={() => setMovingChild(child)}
+                    onLongPress={() => setMovingChild(child)}
                   />
                 ))}
               </View>
@@ -216,7 +218,7 @@ export default function ListDetailScreen({
           }
           ListFooterComponent={
             <Pressable onPress={() => setAddingChild(true)} hitSlop={8}>
-              <Text style={styles.addChild}>+ Add a category or timer here</Text>
+              <Text style={styles.addChild}>Add a category or timer here</Text>
             </Pressable>
           }
         />

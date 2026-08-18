@@ -54,7 +54,7 @@ export default function HomeScreen({ onOpen }) {
       />
 
       <View style={styles.footer}>
-        <VibeButton label="+ Add Tracker" onPress={() => setAdding(true)} />
+        <VibeButton label="Add" onPress={() => setAdding(true)} />
         <Pressable onPress={() => setJoining(true)} hitSlop={8}>
           <Text style={styles.joinLink}>Join with code</Text>
         </Pressable>
