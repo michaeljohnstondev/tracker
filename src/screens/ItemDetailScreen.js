@@ -18,8 +18,25 @@ import ItemReminders, { normalizeReminders } from '../components/ItemReminders';
 import { useTrackers } from '../store/TrackerContext';
 import { useAuth } from '../store/AuthContext';
 import { ensurePushPermission } from '../services/fcm';
-import { syncItemReminders, clearItemReminders } from '../services/reminders';
+import {
+  syncItemReminders,
+  clearItemReminders,
+  syncGoalReminder,
+} from '../services/reminders';
+import GoalModal from '../components/GoalModal';
+import VibeButton from '../components/ui/VibeButton';
+import { useNow } from '../lib/useNow';
+import { fmtElapsed } from '../lib/format';
 import { resolveColor, fmtStart } from '../lib/format';
+
+// Goals can be fractional, so 1.5 has to read as "1h 30m".
+function fmtGoal(hours) {
+  if (!hours) return '—';
+  const whole = Math.floor(hours);
+  const mins = Math.round((hours - whole) * 60);
+  if (!whole) return `${mins}m`;
+  return mins ? `${whole}h ${mins}m` : `${whole}h`;
+}
 
 export default function ItemDetailScreen({ tracker, item, onBack }) {
   // Ticking off lives on the list screen's checkbox, not here.
@@ -29,8 +46,37 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
   const [text, setText] = useState(item.text ?? '');
   const [note, setNote] = useState(item.note ?? '');
   const [reminders, setReminders] = useState(normalizeReminders(item.reminders));
+  const [goalOpen, setGoalOpen] = useState(false);
 
   const color = resolveColor(tracker.color);
+
+  // An item can carry a timer of its own — a gym session, a meditation, a
+  // night's sleep — rather than having to become its own tracker.
+  const hasTimer = item.goalHours != null || item.startMs != null;
+  const timerRunning = item.startMs != null;
+  const now = useNow(timerRunning);
+  const elapsedMs = timerRunning ? now - item.startMs : 0;
+  const goalMs = (item.goalHours || 0) * 3600 * 1000;
+  const reachedGoal = goalMs > 0 && elapsedMs >= goalMs;
+
+  // Written straight through rather than through the autosave draft: these are
+  // button presses, not typing, so there's nothing to debounce.
+  const applyTimer = useCallback(
+    (patch) => {
+      updateItemIn(tracker, item.id, patch);
+      syncGoalReminder({
+        tracker,
+        uid,
+        // Distinct from the parent tracker's own goal alarm, which would
+        // otherwise share an id and overwrite this one.
+        key: `item_${item.id}`,
+        label: item.text,
+        startMs: 'startMs' in patch ? patch.startMs : item.startMs,
+        goalHours: 'goalHours' in patch ? patch.goalHours : item.goalHours,
+      });
+    },
+    [tracker, item, uid, updateItemIn]
+  );
 
   // Re-seed when a different item is opened, or when someone else edits this
   // one on a shared list. Local edits in progress are intentionally not
@@ -188,6 +234,66 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
             style={styles.note}
           />
 
+          <Text style={styles.label}>Repeat</Text>
+          <View style={styles.repeatRow}>
+            {[
+              { value: null, label: 'Never' },
+              { value: 'daily', label: 'Daily' },
+              { value: 'weekly', label: 'Weekly' },
+            ].map((option) => (
+              <VibeButton
+                key={option.label}
+                label={option.label}
+                variant="toggle"
+                color={(item.repeat ?? null) === option.value ? 'green' : 'gray'}
+                onPress={() =>
+                  updateItemIn(tracker, item.id, { repeat: option.value })
+                }
+                style={styles.repeatChip}
+              />
+            ))}
+          </View>
+          {item.repeat ? (
+            <Text style={styles.repeatHint}>
+              Un-ticks itself {item.repeat === 'daily' ? 'each day' : 'each Monday'}.
+            </Text>
+          ) : null}
+
+          <Text style={styles.label}>Timer</Text>
+          {!hasTimer ? (
+            <Pressable onPress={() => applyTimer({ goalHours: 1 })} hitSlop={8}>
+              <Text style={styles.addLink}>Add a timer</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.timerBox}>
+              <Text style={[styles.elapsed, reachedGoal && { color: theme.colors.vibeGreen }]}>
+                {fmtElapsed(elapsedMs)}
+              </Text>
+
+              <Pressable onPress={() => setGoalOpen(true)} hitSlop={8}>
+                <Text style={styles.goalLine}>
+                  Goal {fmtGoal(item.goalHours)} ✎
+                </Text>
+              </Pressable>
+
+              <View style={styles.timerActions}>
+                <VibeButton
+                  label={timerRunning ? 'Stop' : 'Start'}
+                  variant={timerRunning ? 'red' : 'green'}
+                  onPress={() =>
+                    applyTimer({ startMs: timerRunning ? null : Date.now() })
+                  }
+                />
+                <Pressable
+                  onPress={() => applyTimer({ startMs: null, goalHours: null })}
+                  hitSlop={8}
+                >
+                  <Text style={styles.removeTimer}>Remove timer</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           <Text style={styles.label}>Reminders</Text>
           <ItemReminders
             value={reminders}
@@ -215,6 +321,13 @@ export default function ItemDetailScreen({ tracker, item, onBack }) {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <GoalModal
+        visible={goalOpen}
+        initialHours={item.goalHours}
+        onClose={() => setGoalOpen(false)}
+        onSubmit={(hours) => applyTimer({ goalHours: hours })}
+      />
     </SafeAreaView>
   );
 }
@@ -239,6 +352,61 @@ const styles = StyleSheet.create({
   note: {
     minHeight: 110,
     textAlignVertical: 'top',
+  },
+  repeatRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  repeatChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  repeatHint: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    marginTop: 8,
+    fontFamily: theme.fonts.main,
+  },
+  addLink: {
+    color: theme.colors.vibeBlue,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
+  },
+  timerBox: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderWidth: 3,
+    borderColor: theme.colors.vibeBlue,
+    borderRadius: theme.sizes.borderRadius,
+    padding: 16,
+    alignItems: 'center',
+  },
+  elapsed: {
+    color: theme.colors.textPrimary,
+    fontSize: 40,
+    fontWeight: '200',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+    fontFamily: theme.fonts.main,
+  },
+  goalLine: {
+    color: theme.colors.vibeCyan,
+    fontSize: 14,
+    marginTop: 6,
+    fontFamily: theme.fonts.main,
+  },
+  timerActions: {
+    alignSelf: 'stretch',
+    marginTop: 14,
+  },
+  removeTimer: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+    textDecorationLine: 'underline',
+    fontFamily: theme.fonts.main,
   },
   meta: {
     marginTop: 26,

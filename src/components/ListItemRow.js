@@ -35,9 +35,10 @@ export default function ListItemRow({ item, color, onToggle, onOpen }) {
         <Text style={[styles.itemText, item.done && styles.itemTextDone]}>
           {item.text}
         </Text>
-        {/* A note is the reason you'd open the row, so signal it exists
-            without spending a line on it. */}
-        {item.note ? <Text style={styles.noteHint}>📝</Text> : null}
+        {/* Signals worth seeing without opening the row. */}
+        {item.note ? <Text style={styles.hintIcon}>📝</Text> : null}
+        {item.repeat ? <Text style={styles.hintIcon}>🔁</Text> : null}
+        {item.startMs != null ? <Text style={styles.hintIcon}>⏱</Text> : null}
       </Pressable>
 
       <Text style={styles.chevron}>›</Text>
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textDecorationLine: 'line-through',
   },
-  noteHint: {
+  hintIcon: {
     fontSize: 11,
     marginLeft: 8,
   },

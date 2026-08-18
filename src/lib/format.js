@@ -44,6 +44,31 @@ export function fmtRemaining(elapsedMs, goalMs) {
   return `${m}m left`;
 }
 
+/**
+ * Start of the current repeat period, as a timestamp.
+ *
+ * A daily item resets at local midnight and a weekly one on Monday morning,
+ * rather than 24 hours or 7 days after it was last ticked — "daily" means
+ * once a day, not once every twenty-four hours. Ticking something at 11pm
+ * shouldn't leave it done until 11pm tomorrow.
+ */
+export function periodStart(repeat, at = Date.now()) {
+  const d = new Date(at);
+  d.setHours(0, 0, 0, 0);
+  if (repeat === 'weekly') {
+    // getDay() is 0 for Sunday; shift so the week starts on Monday.
+    const weekday = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - weekday);
+  }
+  return d.getTime();
+}
+
+/** True when a repeating item was completed in an earlier period. */
+export function isStale(item) {
+  if (!item?.repeat || !item.done) return false;
+  return (item.doneAt ?? 0) < periodStart(item.repeat);
+}
+
 // Resolve a stored color name (e.g. 'vibeBlue') to its hex, with a
 // sensible fallback so a bad/missing value never crashes rendering.
 export function resolveColor(name) {

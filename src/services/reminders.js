@@ -13,6 +13,14 @@ import VibeAlert from '../components/ui/VibeAlert';
 
 const remindersRef = () => collection(db, 'reminders');
 
+// Goals can be fractional, so "0.5h reached" would read badly.
+function fmtGoalLabel(hours) {
+  const whole = Math.floor(hours);
+  const mins = Math.round((hours - whole) * 60);
+  if (!whole) return `${mins}m`;
+  return mins ? `${whole}h ${mins}m` : `${whole}h`;
+}
+
 // Deterministic, so re-saving an item replaces its alarms rather than
 // accumulating duplicates — and so nothing here needs a query.
 //
@@ -25,14 +33,24 @@ const deleteReminder = (itemId, at) =>
   deleteDoc(doc(remindersRef(), reminderId(itemId, at)));
 
 // A timer's goal is just an alarm at a known future moment, so it reuses the
-// same collection and the same sweep. One per tracker, replaced whenever the
+// same collection and the same sweep. One per timer, replaced whenever the
 // start time or goal changes, deleted when the timer stops.
-const goalId = (tracker) => `goal__${tracker.remoteId ?? tracker.id}`;
+//
+// `key` distinguishes a tracker's own timer from a timer attached to one of
+// its items, which would otherwise share an id and overwrite each other.
+const goalId = (key) => `goal__${key}`;
 
-export async function syncGoalReminder({ tracker, uid, startMs, goalHours }) {
+export async function syncGoalReminder({
+  tracker,
+  uid,
+  startMs,
+  goalHours,
+  key,
+  label,
+}) {
   if (!uid || !tracker?.id) return;
 
-  const ref = doc(remindersRef(), goalId(tracker));
+  const ref = doc(remindersRef(), goalId(key ?? tracker.remoteId ?? tracker.id));
   const fireAt =
     startMs != null && goalHours ? startMs + goalHours * 3600 * 1000 : null;
 
@@ -44,10 +62,10 @@ export async function syncGoalReminder({ tracker, uid, startMs, goalHours }) {
     }
 
     await setDoc(ref, {
-      itemId: tracker.remoteId ?? tracker.id,
+      itemId: key ?? tracker.remoteId ?? tracker.id,
       listId: tracker?.shared ? tracker.remoteId : null,
-      trackerName: tracker.name ?? '',
-      itemText: `${goalHours}h reached — you can eat`,
+      trackerName: label ?? tracker.name ?? '',
+      itemText: `${fmtGoalLabel(goalHours)} reached`,
       targetUids: [uid],
       fireAt,
       createdBy: uid,

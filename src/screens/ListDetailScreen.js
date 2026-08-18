@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,10 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ReorderableList from 'react-native-reorderable-list';
+import {
+  ScrollViewContainer,
+  NestedReorderableList,
+} from 'react-native-reorderable-list';
 import theme from '../theme/themes';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
@@ -16,12 +19,12 @@ import ScreenHeader from '../components/ScreenHeader';
 import ShareListModal from '../components/ShareListModal';
 import RenameModal from '../components/RenameModal';
 import ListItemRow from '../components/ListItemRow';
-import { TrackerCardView } from '../components/TrackerCard';
+import TrackerCard from '../components/TrackerCard';
 import AddTrackerModal from '../components/AddTrackerModal';
 import MoveTrackerModal from '../components/MoveTrackerModal';
 import TrackerMenu from '../components/TrackerMenu';
 import { useTrackers } from '../store/TrackerContext';
-import { resolveColor } from '../lib/format';
+import { resolveColor, isStale } from '../lib/format';
 
 /**
  * A container: its items, and anything filed inside it.
@@ -45,9 +48,11 @@ export default function ListDetailScreen({
     setTrackerParent,
     addItemTo,
     toggleItemIn,
+    updateItemIn,
     clearDoneIn,
     renameTracker,
     reorderItemsIn,
+    reorderTrackers,
     finalizeShare,
     deleteTracker,
   } = useTrackers();
@@ -76,6 +81,18 @@ export default function ListDetailScreen({
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
   const doneCount = items.filter((i) => i.done).length;
+
+  // Repeating items un-tick themselves once their period has passed. Done on
+  // view rather than on a schedule: there's no background process to rely on,
+  // and the only moment it has to be right is when you're looking at it.
+  //
+  // On a shared list both people may run this; the write is idempotent, so a
+  // double-clear is harmless.
+  useEffect(() => {
+    items.filter(isStale).forEach((item) => {
+      updateItemIn(tracker, item.id, { done: false, doneAt: null, doneBy: null });
+    });
+  }, [items, tracker, updateItemIn]);
 
   const toggle = useCallback(
     (itemId) => toggleItemIn(tracker, itemId),
@@ -146,50 +163,54 @@ export default function ListDetailScreen({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        <ReorderableList
-          data={items}
-          keyExtractor={(item) => item.id}
-          onReorder={({ from, to }) => reorderItemsIn(tracker, from, to)}
-          renderItem={({ item }) => (
-            <ListItemRow
-              item={item}
-              color={color}
-              onToggle={() => toggle(item.id)}
-              onOpen={() => onOpenItem?.(tracker.id, item.id)}
-            />
-          )}
+        {/* Two draggable lists in one scroll view: what's filed in here, then
+            the items. Nesting them this way is what makes both reorderable —
+            a single list can only hold one kind of thing, and putting the
+            containers in a header left them stubbornly undraggable while the
+            items beside them moved fine. */}
+        <ScrollViewContainer
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          // Only when the container is genuinely empty. This is the item
-          // list's empty state, so without the children check it claimed
-          // "nothing here" while sitting above a screenful of containers.
-          ListEmptyComponent={
-            children.length === 0 ? (
-              <Text style={styles.empty}>Nothing here yet.</Text>
-            ) : null
-          }
-          // Anything filed inside sits above the items. Not draggable — the
-          // reorderable list holds the items, and it can only hold one kind
-          // of thing. Ordering items matters more than ordering the handful
-          // of containers inside one.
-          ListHeaderComponent={
-            children.length > 0 ? (
-              <View style={styles.children}>
-                {children.map((child) => (
-                  // The plain card: drag hooks only work inside the list's own
-                  // cells, and a header isn't one.
-                  <TrackerCardView
-                    key={child.id}
-                    tracker={child}
-                    onPress={() => onOpenChild?.(child.id)}
-                    onLongPress={() => setMovingChild(child)}
-                  />
-                ))}
-              </View>
-            ) : null
-          }
-        />
+        >
+          {children.length > 0 && (
+            <NestedReorderableList
+              data={children}
+              scrollable={false}
+              keyExtractor={(t) => t.id}
+              onReorder={({ from, to }) =>
+                reorderTrackers(from, to, children.map((t) => t.id))
+              }
+              renderItem={({ item: child, index }) => (
+                <TrackerCard
+                  tracker={child}
+                  index={index}
+                  onPress={() => onOpenChild?.(child.id)}
+                  onHold={() => setMovingChild(child)}
+                />
+              )}
+            />
+          )}
+
+          <NestedReorderableList
+            data={items}
+            scrollable={false}
+            keyExtractor={(item) => item.id}
+            onReorder={({ from, to }) => reorderItemsIn(tracker, from, to)}
+            renderItem={({ item }) => (
+              <ListItemRow
+                item={item}
+                color={color}
+                onToggle={() => toggle(item.id)}
+                onOpen={() => onOpenItem?.(tracker.id, item.id)}
+              />
+            )}
+          />
+
+          {children.length === 0 && items.length === 0 && (
+            <Text style={styles.empty}>Nothing here yet.</Text>
+          )}
+        </ScrollViewContainer>
 
         {/* Same Add button as the home screen, in the same place — a container
             is a container wherever you're standing. */}
@@ -295,9 +316,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 60,
     fontFamily: theme.fonts.main,
-  },
-  children: {
-    marginBottom: 6,
   },
   item: {
     flexDirection: 'row',
