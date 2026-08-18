@@ -263,7 +263,14 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     },
     [applyTimer, updateNode, node]
   );
-  const doneCount = children.filter((c) => c.done).length;
+  // Only what Clear would actually remove. Repeating items are ticked off
+  // rather than finished — they come back on their own — so deleting one
+  // because it was done today would throw away the habit. Counting them here
+  // made the button promise to clear things it then left alone.
+  const clearable = useMemo(
+    () => children.filter((c) => c.done && !c.repeat),
+    [children]
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
@@ -432,16 +439,14 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 
         {isContainer && (
           <View style={styles.footer}>
-            {doneCount > 0 && (
+            {clearable.length > 0 && (
               <Pressable
-                onPress={() =>
-                  children
-                    .filter((c) => c.done && !c.repeat)
-                    .forEach((c) => deleteNode(c))
-                }
+                onPress={() => clearable.forEach((c) => deleteNode(c))}
                 hitSlop={8}
               >
-                <Text style={styles.clearDone}>Clear {doneCount} completed</Text>
+                <Text style={styles.clearDone}>
+                  Clear {clearable.length} completed
+                </Text>
               </Pressable>
             )}
             <VibeButton label="Add" onPress={() => setAdding(true)} />
