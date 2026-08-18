@@ -61,7 +61,6 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     deleteNode,
     reorderChildren,
     toggleDone,
-    finalizeShare,
   } = useNodes();
   const { uid } = useAuth();
 
@@ -208,16 +207,28 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     );
   }, [node, children.length, deleteNode, onBack]);
 
+  // Set the moment a share is published, cleared once we've followed it.
+  const [pendingRoot, setPendingRoot] = useState(null);
+
+  // Follow the node to its published twin as soon as that twin exists.
+  //
+  // The local copy is deleted once the upload is confirmed, and this screen is
+  // showing it. Without moving first, the screen would be rendering a node
+  // that had just been removed — and the share sheet would be torn down with
+  // it, mid-use.
+  useEffect(() => {
+    if (!pendingRoot) return;
+    if (!nodes.some((n) => n.id === pendingRoot)) return;
+    setPendingRoot(null);
+    onReplace?.(pendingRoot);
+  }, [pendingRoot, nodes, onReplace]);
+
   const handleShareClose = useCallback(
     (result) => {
       setSharing(false);
-      if (!result?.rootId) return;
-      // Switch to the shared copy before the local one goes, so nothing is
-      // left pointing at a node that no longer exists.
-      onReplace?.(result.rootId);
-      finalizeShare(result.localId);
+      if (result?.rootId) setPendingRoot(result.rootId);
     },
-    [onReplace, finalizeShare]
+    []
   );
 
   // The two halves of the app, and a node is exactly one of them.
@@ -466,7 +477,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             onPick={addDetail}
           />
 
-          <ShareNodeModal visible={sharing} node={node} onClose={handleShareClose} />
+          <ShareNodeModal
+            visible={sharing}
+            node={node}
+            onPublished={setPendingRoot}
+            onClose={handleShareClose}
+          />
 
           <NodeMenu
             visible={menuOpen}

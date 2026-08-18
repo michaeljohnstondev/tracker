@@ -48,15 +48,11 @@ function Router() {
     return <NodeScreen node={null} onOpen={open} onBack={goBack} onReplace={replace} />;
   }
 
-  return (
-    <NodeScreen
-      key={node?.id ?? 'root'}
-      node={node}
-      onOpen={open}
-      onBack={goBack}
-      onReplace={replace}
-    />
-  );
+  // Deliberately unkeyed. Keying on the node id remounts the screen whenever
+  // it changes, which tears down any open sheet with it — and sharing swaps
+  // the local node for its published twin while the share sheet is still open.
+  // The screen re-seeds its own state from the node instead.
+  return <NodeScreen node={node} onOpen={open} onBack={goBack} onReplace={replace} />;
 }
 
 export default function App() {

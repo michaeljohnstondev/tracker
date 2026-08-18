@@ -18,7 +18,7 @@ import { ensurePushPermission } from '../services/fcm';
 
 // Sign in, publish, hand over a code — one flow, one sheet. Splitting them
 // into separate screens would make a two-tap job feel like a setup wizard.
-export default function ShareNodeModal({ visible, node, onClose }) {
+export default function ShareNodeModal({ visible, node, onClose, onPublished }) {
   const { user, signIn, busy } = useAuth();
   const { shareNode } = useNodes();
 
@@ -54,13 +54,17 @@ export default function ShareNodeModal({ visible, node, onClose }) {
       // being awaited, so this works offline and can't hang the sheet.
       const { rootId: newRoot } = shareNode(node);
       setPublishedRoot(newRoot);
+      // Tell the screen straight away rather than waiting for this sheet to
+      // close: the local copy is removed as soon as the upload is confirmed,
+      // and the screen underneath has to have moved on by then.
+      onPublished?.(newRoot);
       // A justified moment to ask: from here on someone else can change this,
       // which is exactly what a notification would tell you about.
       ensurePushPermission(user?.uid);
     } catch (e) {
       VibeAlert('Could not share', e?.message ?? 'Please try again.');
     }
-  }, [shareNode, node, user]);
+  }, [shareNode, node, user, onPublished]);
 
   const handleInvite = useCallback(async () => {
     // Belt and braces: without a root there's nothing to invite anyone to, and

@@ -324,8 +324,6 @@ export function NodeProvider({ children }) {
     commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
   }, [sharedTrees, commitLocal]);
 
-  // Kept for callers; the removal itself is driven by confirmation above.
-  const finalizeShare = useCallback(() => {}, []);
 
   const value = {
     nodes,
@@ -339,7 +337,6 @@ export function NodeProvider({ children }) {
     reorderChildren,
     toggleDone,
     shareNode,
-    finalizeShare,
   };
 
   return <NodeContext.Provider value={value}>{children}</NodeContext.Provider>;
