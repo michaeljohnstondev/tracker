@@ -22,6 +22,7 @@ import NodeCard from '../components/NodeCard';
 import AddNodeModal from '../components/AddNodeModal';
 import NodeMenu from '../components/NodeMenu';
 import ShareNodeModal from '../components/ShareNodeModal';
+import AddDetailModal from '../components/AddDetailModal';
 import RenameModal from '../components/RenameModal';
 import JoinListModal from '../components/JoinListModal';
 import GoalModal from '../components/GoalModal';
@@ -72,6 +73,10 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const [goalOpen, setGoalOpen] = useState(false);
   const [note, setNote] = useState(node?.note ?? '');
   const [reminders, setReminders] = useState(normalizeReminders(node?.reminders));
+  const [addingDetail, setAddingDetail] = useState(false);
+  // A section is on screen if the node carries it, or if it was just added and
+  // is waiting to be filled in.
+  const [revealed, setRevealed] = useState({});
 
   const isRoot = !node;
   const color = resolveColor(node?.color);
@@ -224,6 +229,29 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   // folder put one on each screen you pass through on the way somewhere else.
   const isContainer = isRoot || node.kind === 'category';
   const hasDetails = !isRoot && !isContainer;
+
+  const showNote = !!node?.note || revealed.note;
+  const showRepeat = !!node?.repeat || revealed.repeat;
+  const showReminders = !!node?.reminders?.length || revealed.reminder;
+
+  // Reset when a different item is opened, or a section revealed on one would
+  // linger on the next.
+  useEffect(() => setRevealed({}), [node?.id]);
+
+  const addDetail = useCallback(
+    (kind) => {
+      if (kind === 'timer') {
+        applyTimer({ goalHours: 1 });
+        return;
+      }
+      if (kind === 'repeat') {
+        updateNode(node, { repeat: 'daily' });
+        return;
+      }
+      setRevealed((r) => ({ ...r, [kind]: true }));
+    },
+    [applyTimer, updateNode, node]
+  );
   const doneCount = children.filter((c) => c.done).length;
 
   return (
@@ -295,45 +323,54 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             </View>
           )}
 
+          {/* Only what this item actually carries. Everything else is added
+              deliberately from the Add button, so a plain line of text stays a
+              plain line of text. */}
           {hasDetails && (
             <View style={styles.details}>
-              <Text style={styles.label}>Notes</Text>
-              <VibeInput
-                value={note}
-                onChangeText={setNote}
-                onBlur={saveNote}
-                placeholder="Anything worth remembering"
-                multiline
-                maxLength={500}
-                autoCapitalize="sentences"
-                style={styles.note}
-              />
-
-              <Text style={styles.label}>Repeat</Text>
-              <View style={styles.chips}>
-                {[
-                  { value: null, label: 'Never' },
-                  { value: 'daily', label: 'Daily' },
-                  { value: 'weekly', label: 'Weekly' },
-                ].map((option) => (
-                  <VibeButton
-                    key={option.label}
-                    label={option.label}
-                    variant="toggle"
-                    color={(node.repeat ?? null) === option.value ? 'green' : 'gray'}
-                    onPress={() => updateNode(node, { repeat: option.value })}
-                    style={styles.chip}
+              {showNote && (
+                <>
+                  <Text style={styles.label}>Note</Text>
+                  <VibeInput
+                    value={note}
+                    onChangeText={setNote}
+                    onBlur={saveNote}
+                    placeholder="Anything worth remembering"
+                    multiline
+                    maxLength={500}
+                    autoCapitalize="sentences"
+                    autoFocus={!node.note}
+                    style={styles.note}
                   />
-                ))}
-              </View>
+                </>
+              )}
 
-              <Text style={styles.label}>Timer</Text>
-              {!nodeHasTimer(node) ? (
-                <Pressable onPress={() => applyTimer({ goalHours: 1 })} hitSlop={8}>
-                  <Text style={styles.addLink}>Add a timer</Text>
-                </Pressable>
-              ) : (
-                <View style={styles.timerBox}>
+              {showRepeat && (
+                <>
+                  <Text style={styles.label}>Repeat</Text>
+                  <View style={styles.chips}>
+                    {[
+                      { value: null, label: 'Never' },
+                      { value: 'daily', label: 'Daily' },
+                      { value: 'weekly', label: 'Weekly' },
+                    ].map((option) => (
+                      <VibeButton
+                        key={option.label}
+                        label={option.label}
+                        variant="toggle"
+                        color={(node.repeat ?? null) === option.value ? 'green' : 'gray'}
+                        onPress={() => updateNode(node, { repeat: option.value })}
+                        style={styles.chip}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {nodeHasTimer(node) && (
+                <>
+                  <Text style={styles.label}>Timer</Text>
+                  <View style={styles.timerBox}>
                   <Text
                     style={[
                       styles.elapsed,
@@ -361,15 +398,26 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                     >
                       <Text style={styles.removeTimer}>Remove timer</Text>
                     </Pressable>
+                    </View>
                   </View>
-                </View>
+                </>
               )}
 
-              <Text style={styles.label}>Reminders</Text>
-              <ItemReminders value={reminders} onChange={applyReminders} />
+              {showReminders && (
+                <>
+                  <Text style={styles.label}>Reminders</Text>
+                  <ItemReminders value={reminders} onChange={applyReminders} />
+                </>
+              )}
             </View>
           )}
         </ScrollViewContainer>
+
+        {hasDetails && (
+          <View style={styles.footer}>
+            <VibeButton label="Add" onPress={() => setAddingDetail(true)} />
+          </View>
+        )}
 
         {isContainer && (
           <View style={styles.footer}>
@@ -411,6 +459,13 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 
       {!isRoot && (
         <>
+          <AddDetailModal
+            visible={addingDetail}
+            node={node}
+            onClose={() => setAddingDetail(false)}
+            onPick={addDetail}
+          />
+
           <ShareNodeModal visible={sharing} node={node} onClose={handleShareClose} />
 
           <NodeMenu
