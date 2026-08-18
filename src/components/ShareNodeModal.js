@@ -48,6 +48,7 @@ export default function ShareNodeModal({ visible, node, onClose }) {
   }, [signIn]);
 
   const handlePublish = useCallback(() => {
+    if (!node) return;
     try {
       // Returns immediately — the writes go to Firestore's queue rather than
       // being awaited, so this works offline and can't hang the sheet.
@@ -62,6 +63,13 @@ export default function ShareNodeModal({ visible, node, onClose }) {
   }, [shareNode, node, user]);
 
   const handleInvite = useCallback(async () => {
+    // Belt and braces: without a root there's nothing to invite anyone to, and
+    // addressing a document by an undefined id throws rather than failing
+    // quietly.
+    if (!rootId || !user?.uid) {
+      VibeAlert('Not shared yet', 'Share this first, then create a code.');
+      return;
+    }
     setWorking(true);
     try {
       const generated = await createInvite(rootId, user.uid);

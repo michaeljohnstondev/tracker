@@ -35,9 +35,15 @@ export default function NodeMenu({ visible, node, onClose, onRename, onShare, on
     onClose();
   };
 
+  // Close, then act once this sheet has actually gone.
+  //
+  // Every action here opens something else — another sheet, or an alert. On
+  // Android each Modal is its own window, and mounting one while another is
+  // still dismissing is what produced the black screen when sharing before.
+  // The delay covers the dismiss animation.
   const run = (fn) => {
     onClose();
-    fn?.();
+    if (fn) setTimeout(fn, 260);
   };
 
   return (
