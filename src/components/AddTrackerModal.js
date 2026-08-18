@@ -22,10 +22,12 @@ import { resolveColor } from '../lib/format';
 
 // A category and a list were the same thing — a container holding items — so
 // there's one option for both. Timer is separate because it isn't a container.
-const TYPE_OPTIONS = [
-  { value: 'category', label: 'Category', icon: '🗂' },
-  { value: 'timer', label: 'Timer', icon: '⏱' },
-];
+//
+// Item only appears inside a container, since at the top level there's nothing
+// for it to belong to.
+const CATEGORY_OPTION = { value: 'category', label: 'Category', icon: '🗂' };
+const ITEM_OPTION = { value: 'item', label: 'Item', icon: '✓' };
+const TIMER_OPTION = { value: 'timer', label: 'Timer', icon: '⏱' };
 
 // Generic spread rather than fasting lengths — the goal is fully editable on
 // the timer screen anyway, so this only has to be a reasonable starting point.
@@ -38,22 +40,33 @@ const fmtGoal = (h) => (h < 1 ? `${Math.round(h * 60)}m` : `${h}h`);
 // blended example ends up suggesting neither well.
 const NAME_PLACEHOLDER = {
   timer: 'e.g. Fast, Workout, Screen time',
-  list: 'e.g. Groceries, Packing, Chores',
+  category: 'e.g. Groceries, Health, Do Daily',
+  item: 'e.g. Milk, Return the modem',
 };
 
 // A Vibe-styled form for creating a tracker. Slides up from the bottom;
 // tapping the dimmed backdrop cancels. Resets its fields each time it
 // opens so a cancelled draft doesn't linger.
-export default function AddTrackerModal({ visible, onClose, onCreate }) {
+export default function AddTrackerModal({
+  visible,
+  onClose,
+  onCreate,
+  onCreateItem,
+  allowItem = false,
+}) {
+  const TYPE_OPTIONS = allowItem
+    ? [CATEGORY_OPTION, ITEM_OPTION, TIMER_OPTION]
+    : [CATEGORY_OPTION, TIMER_OPTION];
   const [name, setName] = useState('');
-  const [type, setType] = useState('timer');
+  // Inside a container, adding an item is the common case, so it leads.
+  const [type, setType] = useState(allowItem ? 'item' : 'category');
   const [color, setColor] = useState(TRACKER_COLORS[0]);
   const [goalHours, setGoalHours] = useState(1);
   const keyboardHeight = useKeyboardHeight();
 
   const reset = () => {
     setName('');
-    setType('timer');
+    setType(allowItem ? 'item' : 'category');
     setColor(TRACKER_COLORS[0]);
     setGoalHours(1);
   };
@@ -66,14 +79,20 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
   const handleCreate = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const make =
+
+    // An item isn't a tracker — it belongs to the container we were opened
+    // from, so it goes back a different way.
+    if (type === 'item') {
+      onCreateItem?.(trimmed);
+      reset();
+      return;
+    }
+
+    onCreate(
       type === 'timer'
-        ? () => makeTimerTracker({ name: trimmed, color, goalHours })
-        : type === 'category'
-          ? () => makeCategoryTracker({ name: trimmed, color })
-          : () => makeListTracker({ name: trimmed, color });
-    const tracker = make();
-    onCreate(tracker);
+        ? makeTimerTracker({ name: trimmed, color, goalHours })
+        : makeCategoryTracker({ name: trimmed, color })
+    );
     reset();
   };
 
@@ -139,6 +158,10 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
               </>
             )}
 
+            {/* An item takes its colour from the container it lives in, so
+                there's nothing to choose. */}
+            {type !== 'item' && (
+              <>
             <Text style={styles.label}>Color</Text>
             <View style={styles.colors}>
               {TRACKER_COLORS.map((c) => {
@@ -156,6 +179,8 @@ export default function AddTrackerModal({ visible, onClose, onCreate }) {
                 );
               })}
             </View>
+              </>
+            )}
 
             <View style={styles.actions}>
               <VibeButton

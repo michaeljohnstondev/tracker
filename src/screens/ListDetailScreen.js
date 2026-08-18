@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ReorderableList from 'react-native-reorderable-list';
 import theme from '../theme/themes';
-import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
 import ScreenHeader from '../components/ScreenHeader';
@@ -52,7 +51,6 @@ export default function ListDetailScreen({
     finalizeShare,
     deleteTracker,
   } = useTrackers();
-  const [text, setText] = useState('');
   const [addingChild, setAddingChild] = useState(false);
   const [movingChild, setMovingChild] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -78,16 +76,6 @@ export default function ListDetailScreen({
   const color = resolveColor(tracker.color);
   const items = tracker.items || [];
   const doneCount = items.filter((i) => i.done).length;
-
-  const addItem = useCallback(() => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    // Clear the field immediately rather than awaiting the write: on a shared
-    // list that write may be queued offline, and the item still shows up
-    // locally from Firestore's own cache.
-    setText('');
-    addItemTo(tracker, trimmed);
-  }, [text, tracker, addItemTo]);
 
   const toggle = useCallback(
     (itemId) => toggleItemIn(tracker, itemId),
@@ -158,26 +146,6 @@ export default function ListDetailScreen({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={8}
       >
-        <View style={styles.addRow}>
-          <VibeInput
-            placeholder="Add an item…"
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={addItem}
-            returnKeyType="done"
-            blurOnSubmit={false}
-            maxLength={80}
-            style={styles.input}
-          />
-          <VibeButton
-            label="Add"
-            variant="green"
-            onPress={addItem}
-            disabled={text.trim().length === 0}
-            style={styles.addBtn}
-          />
-        </View>
-
         <ReorderableList
           data={items}
           keyExtractor={(item) => item.id}
@@ -193,8 +161,13 @@ export default function ListDetailScreen({
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          // Only when the container is genuinely empty. This is the item
+          // list's empty state, so without the children check it claimed
+          // "nothing here" while sitting above a screenful of containers.
           ListEmptyComponent={
-            <Text style={styles.empty}>Nothing here yet.</Text>
+            children.length === 0 ? (
+              <Text style={styles.empty}>Nothing here yet.</Text>
+            ) : null
           }
           // Anything filed inside sits above the items. Not draggable — the
           // reorderable list holds the items, and it can only hold one kind
@@ -249,6 +222,13 @@ export default function ListDetailScreen({
         visible={addingChild}
         onClose={() => setAddingChild(false)}
         onCreate={handleCreateChild}
+        // Items belong to this container, so they're offered here and not at
+        // the top level, where there'd be nothing to attach them to.
+        allowItem
+        onCreateItem={(itemText) => {
+          addItemTo(tracker, itemText);
+          setAddingChild(false);
+        }}
       />
 
       <MoveTrackerModal
