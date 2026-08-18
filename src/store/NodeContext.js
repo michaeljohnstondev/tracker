@@ -21,6 +21,21 @@ import VibeAlert from '../components/ui/VibeAlert';
 
 const NodeContext = createContext(null);
 
+// Say it out loud, once per distinct problem.
+//
+// These all used to go to console.error, which production strips — so a
+// subscription that failed on someone else's phone reported precisely nothing
+// and the app just seemed to misbehave. Repeats are swallowed because a
+// listener can fail on every retry.
+const reported = new Set();
+function reportRemote(what, err) {
+  const message = err?.message || String(err);
+  console.error(`[nodes] ${what}:`, message);
+  if (reported.has(what)) return;
+  reported.add(what);
+  VibeAlert(`Sync problem: ${what}`, message, [], 'error');
+}
+
 export function NodeProvider({ children }) {
   const { uid, user } = useAuth();
 
@@ -93,14 +108,14 @@ export function NodeProvider({ children }) {
               // that surfaces as an uncaught error rather than one dead
               // subscription, and takes everything else with it.
               (err) => {
-                console.error('[nodes] tree', rootId, err?.message || err);
+                reportRemote('shared list', err);
                 drop(rootId);
               }
             )
           );
         });
       },
-      (err) => console.error('[nodes] memberships:', err?.message || err)
+      (err) => reportRemote('memberships', err)
     );
 
     return () => {
@@ -121,26 +136,32 @@ export function NodeProvider({ children }) {
     const email = user?.email;
     if (!uid || !email) return undefined;
 
-    return remote.subscribeToInvitations(
-      email,
-      (invitations) => {
-        invitations.forEach(({ rootId }) => {
-          // The snapshot fires again the moment the membership lands, before
-          // the invitation has been cleared — so without this the same one is
-          // taken up twice.
-          if (accepting.current.has(rootId)) return;
-          accepting.current.add(rootId);
+    // Wrapped because this is the newest thing to run at sign-in, and sign-in
+    // is where the app started dying. Nothing about waiting for an invitation
+    // is worth taking the app down for.
+    try {
+      return remote.subscribeToInvitations(
+        email,
+        (invitations) => {
+          invitations.forEach(({ rootId }) => {
+            // The snapshot fires again the moment the membership lands, before
+            // the invitation has been cleared — so without this the same one
+            // is taken up twice.
+            if (accepting.current.has(rootId)) return;
+            accepting.current.add(rootId);
 
-          remote
-            .acceptInvitation({ rootId, email, uid })
-            .catch((err) => {
+            remote.acceptInvitation({ rootId, email, uid }).catch((err) => {
               accepting.current.delete(rootId);
-              console.error('[nodes] accept failed:', err?.message || err);
+              reportRemote('accepting an invitation', err);
             });
-        });
-      },
-      (err) => console.error('[nodes] invitations:', err?.message || err)
-    );
+          });
+        },
+        (err) => reportRemote('invitations', err)
+      );
+    } catch (err) {
+      reportRemote('watching for invitations', err);
+      return undefined;
+    }
   }, [uid, user?.email]);
 
   const setFiledUnder = useCallback((nodeId, parentId) => {

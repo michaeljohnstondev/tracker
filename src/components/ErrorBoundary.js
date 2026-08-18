@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
 import { signOut } from '@react-native-firebase/auth';
 import theme from '../theme/themes';
 import { auth } from '../services/firebase';
@@ -20,7 +20,11 @@ import { auth } from '../services/firebase';
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null, info: null };
+    // Two separate slots on purpose. A render error means React has already
+    // thrown the subtree away and there is nothing left to show but the
+    // report. An error from anywhere else leaves the app intact, and the
+    // report goes over the top of it — see render().
+    this.state = { error: null, info: null, globalError: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -33,10 +37,7 @@ export default class ErrorBoundary extends React.Component {
 
     this.previousHandler = errorUtils.getGlobalHandler?.();
     errorUtils.setGlobalHandler((error, isFatal) => {
-      this.setState({
-        error,
-        info: { componentStack: isFatal ? '(uncaught, fatal)' : '(uncaught)' },
-      });
+      this.setState({ globalError: error, fatal: isFatal });
       // The previous handler is deliberately not called for a fatal error:
       // handing it on is what closes the app, and a crash nobody can read is
       // the problem being solved here.
@@ -55,10 +56,7 @@ export default class ErrorBoundary extends React.Component {
     console.error('[crash]', error?.message, info?.componentStack);
   }
 
-  render() {
-    const { error, info } = this.state;
-    if (!error) return this.props.children;
-
+  report(error, componentStack, dismiss) {
     return (
       <View style={styles.screen}>
         <Text style={styles.title}>Something broke</Text>
@@ -69,16 +67,13 @@ export default class ErrorBoundary extends React.Component {
           <Text style={styles.stack}>
             {String(error?.stack || '').split('\n').slice(0, 6).join('\n')}
           </Text>
-          {info?.componentStack ? (
+          {componentStack ? (
             <Text style={styles.stack}>
-              {info.componentStack.split('\n').slice(0, 8).join('\n')}
+              {componentStack.split('\n').slice(0, 8).join('\n')}
             </Text>
           ) : null}
         </ScrollView>
-        <Pressable
-          onPress={() => this.setState({ error: null, info: null })}
-          style={styles.button}
-        >
+        <Pressable onPress={dismiss} style={styles.button}>
           <Text style={styles.buttonText}>Try again</Text>
         </Pressable>
 
@@ -86,12 +81,12 @@ export default class ErrorBoundary extends React.Component {
             being loaded for the signed-in account stops being loaded, and the
             app is usable again — without wiping the device's own data, which
             is the only escape otherwise. Firebase is called directly here:
-            this screen renders in place of the providers, so there's no auth
+            this can render in place of the providers, so there's no auth
             context to reach. */}
         <Pressable
           onPress={() => {
             signOut(auth).catch(() => {});
-            this.setState({ error: null, info: null });
+            dismiss();
           }}
           style={[styles.button, styles.buttonQuiet]}
         >
@@ -100,6 +95,42 @@ export default class ErrorBoundary extends React.Component {
           </Text>
         </Pressable>
       </View>
+    );
+  }
+
+  render() {
+    const { error, info, globalError, fatal } = this.state;
+
+    // React threw the subtree away before calling this, so there is nothing
+    // left to render around — the report takes the whole screen.
+    if (error) {
+      return this.report(error, info?.componentStack, () =>
+        this.setState({ error: null, info: null })
+      );
+    }
+
+    return (
+      <>
+        {this.props.children}
+        {/* Everything else leaves the app standing, so the report goes over
+            the top rather than replacing it. Swapping the tree out from under
+            a live screen was itself a crash: on Android a Modal is its own
+            window, and unmounting a visible one takes the app with it — which
+            is exactly what an open sheet would hit here. */}
+        <Modal
+          visible={!!globalError}
+          transparent={false}
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => this.setState({ globalError: null })}
+        >
+          {this.report(
+            globalError,
+            fatal ? '(uncaught, fatal)' : '(uncaught)',
+            () => this.setState({ globalError: null })
+          )}
+        </Modal>
+      </>
     );
   }
 }

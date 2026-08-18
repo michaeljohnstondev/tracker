@@ -111,9 +111,51 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 
   // ---- Note ---------------------------------------------------------------
 
+  // Typing is what saves a note, not leaving the field.
+  //
+  // The old arrangement wrote on blur, with unmounting as the safety net for
+  // backing out mid-sentence. That net stopped existing when the router was
+  // made unkeyed to survive sharing: this screen is now reused as you move
+  // around rather than remounted, so going back doesn't unmount anything — it
+  // just swaps the node underneath, and the effect below adopts the new node's
+  // note over whatever was typed. The words were gone before anything tried to
+  // save them.
+  const noteTimer = useRef(null);
+  const noteDirty = useRef(false);
+
+  const handleNoteChange = useCallback(
+    (text) => {
+      setNote(text);
+      noteDirty.current = true;
+
+      // Captured, so a write still in flight when you move on lands on the
+      // node it was written for rather than the one now on screen.
+      const target = node;
+      clearTimeout(noteTimer.current);
+      noteTimer.current = setTimeout(() => {
+        noteTimer.current = null;
+        noteDirty.current = false;
+        const trimmed = text.trim();
+        if (target && trimmed !== (target.note ?? '')) {
+          updateNode(target, { note: trimmed });
+        }
+      }, 600);
+    },
+    [node, updateNode]
+  );
+
+  // Adopt what the node carries — unless there are unsaved keystrokes, which
+  // a snapshot echoing back the last save would otherwise overwrite mid-word.
   useEffect(() => {
+    if (noteDirty.current) return;
     setNote(node?.note ?? '');
   }, [node?.id, node?.note]);
+
+  // A different node is a clean slate regardless.
+  useEffect(() => {
+    noteDirty.current = false;
+    setNote(node?.note ?? '');
+  }, [node?.id]);
 
   const storedReminders = useMemo(
     () => normalizeReminders(node?.reminders),
@@ -129,7 +171,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id, reminderKey]);
 
+  /** Write immediately, cancelling anything the debounce still owed. */
   const saveNote = useCallback(() => {
+    clearTimeout(noteTimer.current);
+    noteTimer.current = null;
+    noteDirty.current = false;
     if (!node) return;
     const trimmed = note.trim();
     if (trimmed === (node.note ?? '')) return;
@@ -139,9 +185,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const flushRef = useRef(saveNote);
   flushRef.current = saveNote;
 
-  // Two safety nets. Unmount covers back and the header chevron; leaving the
-  // foreground covers the app being closed before anything else fires, at
-  // which point the process dies and nothing else would run.
+  // Leaving the foreground is the one exit a debounce can't cover: the process
+  // can be killed while a write is still pending, and nothing else would run.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') flushRef.current();
@@ -379,7 +424,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                   <Text style={styles.label}>Note</Text>
                   <VibeInput
                     value={note}
-                    onChangeText={setNote}
+                    onChangeText={handleNoteChange}
                     onBlur={saveNote}
                     placeholder="Anything worth remembering"
                     multiline
