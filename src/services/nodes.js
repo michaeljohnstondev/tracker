@@ -55,6 +55,9 @@ function toRemote(node, rootId) {
     rootId,
     parentId: node.parentId ?? null,
     name: node.name ?? '',
+    // Without this a shared category came back with no kind and fell through
+    // to "item" — sharing a folder turned it into a task.
+    kind: node.kind === 'category' ? 'category' : 'item',
     color: node.color ?? 'vibeBlue',
     order: node.order ?? Date.now(),
     createdAt: node.createdAt ?? Date.now(),
