@@ -125,14 +125,6 @@ service cloud.firestore {
         && (nodeId == rootId || isMember(rootId));
     }
 
-    // Find your own lists again when the membership that points at them is
-    // gone — deleted by mistake, or never written because a share half
-    // failed. Every node records who made it, so ownership survives
-    // independently of membership, and a collection-group read filtered on
-    // ownerUid is provable from the query's own constraint.
-    //
-    // This grants nothing new: it returns only documents you created, and
-    // rebuilding the membership still has to satisfy the rule below.
     match /memberships/{docId} {
       allow read: if signedIn()
         && (resource.data.uid == uid() || isMember(resource.data.rootId));
@@ -162,7 +154,12 @@ service cloud.firestore {
     match /shares/{docId} {
       allow read: if signedIn() && resource.data.email == request.auth.token.email;
 
-      allow create: if signedIn()
+      // Update as well as create: setDoc on an invitation that already exists
+      // is an update, so inviting the same person twice — which is exactly
+      // what you do when the first one doesn't seem to have worked — was
+      // refused. Nothing can be repointed by it, since the id pins both the
+      // tree and the address.
+      allow create, update: if signedIn()
         && isMember(request.resource.data.rootId)
         && docId == request.resource.data.rootId + '_' + request.resource.data.email;
 

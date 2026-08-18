@@ -230,8 +230,11 @@ export async function deleteNode(id, rootId) {
 // ---- Invites -------------------------------------------------------------
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// I, O, 0 and 1 are missing from that alphabet on purpose: a code gets read
+// aloud or copied off a screen, and those four are what people get wrong.
+const CODE_LENGTH = 6;
 
-function randomCode(length = 6) {
+function randomCode(length = CODE_LENGTH) {
   let out = '';
   for (let i = 0; i < length; i += 1) {
     out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
@@ -260,10 +263,23 @@ export async function createInvite(rootId, uid, attempts = 5) {
  * knowing an id buys nothing.
  */
 export async function redeemInvite(code, uid) {
-  const raw = String(code || '').trim();
-  if (!raw) throw new Error('Enter an invite code.');
+  // Spaces and dashes are how people write a code down and read it back, and
+  // none of them mean anything here.
+  const cleaned = String(code || '').replace(/[\s-]/g, '');
+  if (!cleaned) throw new Error('Enter an invite code.');
 
-  const snap = await getDoc(doc(db, 'invites', raw.toUpperCase()));
+  const asCode = cleaned.toUpperCase();
+  const looksLikeCode = asCode.length === CODE_LENGTH;
+
+  let snap;
+  try {
+    snap = await getDoc(doc(db, 'invites', asCode));
+  } catch (err) {
+    // Being refused the read is a different problem from the code being
+    // wrong, and saying so saves guessing at which.
+    throw new Error(`Could not check that code: ${err?.message || err}`);
+  }
+
   if (snapExists(snap)) {
     const { rootId } = snapData(snap);
     await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
@@ -271,24 +287,38 @@ export async function redeemInvite(code, uid) {
       uid,
       role: 'member',
       joinedAt: Date.now(),
-      usedInviteCode: raw.toUpperCase(),
+      usedInviteCode: asCode,
     });
     return rootId;
   }
 
-  // No such code. Ownership can't be checked from here — reading the root node
-  // needs the very membership being restored — so the write is simply
-  // attempted and the rules decide.
+  // It was the right shape and there's no such invitation, so it isn't a list
+  // id either — say the useful thing rather than trying the other path and
+  // reporting whatever that fails with.
+  if (looksLikeCode) {
+    throw new Error(
+      `No invitation with the code ${asCode}. Codes are ${CODE_LENGTH} characters, ` +
+        'and one stops working if the list it points at is deleted. Ask for a new one.'
+    );
+  }
+
+  // Not a code, so treat it as the id of a list you own. Ownership can't be
+  // checked from here — reading the root node needs the very membership being
+  // restored — so the write is attempted and the rules decide.
   try {
-    await setDoc(doc(db, 'memberships', membershipId(raw, uid)), {
-      rootId: raw,
+    await setDoc(doc(db, 'memberships', membershipId(cleaned, uid)), {
+      rootId: cleaned,
       uid,
       role: 'owner',
       joinedAt: Date.now(),
     });
-    return raw;
-  } catch {
-    throw new Error('That isn’t a valid code, or that list isn’t yours.');
+    return cleaned;
+  } catch (err) {
+    throw new Error(
+      `Not an invite code, and not a list you own.
+
+${err?.message || err}`
+    );
   }
 }
 
