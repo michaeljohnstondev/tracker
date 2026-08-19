@@ -186,8 +186,12 @@ exports.onNodeCompleted = onDocumentUpdated(
   }
 );
 
-// "Michael shared Groceries with you" — sent when someone invites a specific
-// person by email, rather than handing out a code.
+// "Michael shared “Home Stuff” with you" — sent when someone invites a
+// specific person by email, rather than handing out a code.
+//
+// The list's name is quoted because it sits mid-sentence, where a name of more
+// than one word runs straight into the words either side of it. An item's name
+// ends its sentence and needs no such help.
 //
 // The invitation is addressed to an email, which is the whole point: it works
 // whether or not that person has an account yet. So the uid has to be looked
@@ -219,7 +223,7 @@ exports.onListShared = onDocumentWritten(
 
     await pushToUsers([invitees.docs[0].id], {
       title: 'Tracker',
-      body: `${actor} shared ${name} with you`,
+      body: `${actor} shared “${name}” with you`,
       data: { type: 'list_shared', rootId: share.rootId },
     });
   }
@@ -247,7 +251,7 @@ exports.onMemberJoined = onDocumentCreated(
 
     await pushToUsers(recipients, {
       title: name,
-      body: `${actor} joined ${name}`,
+      body: `${actor} joined “${name}”`,
       data: { type: 'member_joined', rootId },
     });
   }
