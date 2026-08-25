@@ -152,6 +152,40 @@ export function dueVisitorsFor(nodes, node, at = Date.now()) {
     .sort((a, b) => a.dueAt - b.dueAt);
 }
 
+/**
+ * A node and everything under it, with fresh ids.
+ *
+ * Copying has to rewrite the parent links as it goes: a duplicated child must
+ * point at the duplicated parent, not the original, or the copy would hang off
+ * the thing it was copied from. Done in one pass with a map from old id to
+ * new, which works at any depth.
+ *
+ * Deliberately not copied: `done` and its timestamps. A copy is something you
+ * still have to do — carrying over the tick would produce a list that arrives
+ * already finished.
+ */
+export function duplicateSubtree(nodes, node, parentId = null) {
+  const subtree = [node, ...descendantsOf(nodes, node.id)];
+  const remap = new Map(subtree.map((n) => [n.id, newId()]));
+
+  return subtree.map((n) => ({
+    ...n,
+    id: remap.get(n.id),
+    parentId: n.id === node.id ? parentId : remap.get(n.parentId) ?? parentId,
+    order: n.id === node.id ? Date.now() : n.order,
+    createdAt: Date.now(),
+    done: false,
+    doneAt: null,
+    doneBy: null,
+    // Local again, wherever it came from. The caller decides where it lands,
+    // and a copy of a shared node is not itself shared until it's put
+    // somewhere shared.
+    shared: false,
+    rootId: undefined,
+    isRoot: undefined,
+  }));
+}
+
 // ---- Persistence ---------------------------------------------------------
 
 export async function loadNodes() {

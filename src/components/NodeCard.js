@@ -16,7 +16,15 @@ const REPEAT_LABELS = { daily: 'Daily', weekly: 'Weekly', always: 'Always' };
  * that particular node happens to carry — a running clock, a child count, a
  * tick box — rather than branching on a type.
  */
-export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onToggle }) {
+export function NodeCardView({
+  node,
+  childCount = 0,
+  onPress,
+  onLongPress,
+  onToggle,
+  selectable = false,
+  selected = false,
+}) {
   const color = resolveColor(node.color);
   const running = node.startMs != null;
   const now = useNow(running);
@@ -46,11 +54,23 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
         styles.card,
         { borderLeftColor: color },
         pressed && styles.pressed,
+        selected && [styles.selected, { borderColor: color }],
       ]}
     >
-      {/* A category isn't something you tick off, so it gets its icon where
-          the checkbox would be. */}
-      {node.kind === 'category' ? (
+      {/* While selecting, the left slot says whether this is picked. Leaving
+          the tick box live there would put two different meanings on the same
+          spot — one that marks a thing done, one that marks it chosen. */}
+      {selectable ? (
+        <View
+          style={[
+            styles.checkbox,
+            { borderColor: color },
+            selected && { backgroundColor: color },
+          ]}
+        >
+          {selected ? <Text style={styles.check}>✓</Text> : null}
+        </View>
+      ) : node.kind === 'category' ? (
         <Text style={[styles.folder, { color }]}>🗂</Text>
       ) : (
         <Pressable
@@ -88,7 +108,7 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
         )}
       </View>
 
-      <Text style={styles.chevron}>›</Text>
+      {selectable ? null : <Text style={styles.chevron}>›</Text>}
     </Pressable>
   );
 }
@@ -99,7 +119,16 @@ export function NodeCardView({ node, childCount = 0, onPress, onLongPress, onTog
  * A drag that ends where it began means the card was held and released, which
  * opens the move sheet instead of reordering.
  */
-export default function NodeCard({ node, index, childCount, onPress, onHold, onToggle }) {
+export default function NodeCard({
+  node,
+  index,
+  childCount,
+  onPress,
+  onHold,
+  onToggle,
+  selectable = false,
+  selected = false,
+}) {
   const drag = useReorderableDrag();
   const hold = useCallback(() => onHold?.(), [onHold]);
 
@@ -124,6 +153,8 @@ export default function NodeCard({ node, index, childCount, onPress, onHold, onT
       onPress={onPress}
       onLongPress={drag}
       onToggle={onToggle}
+      selectable={selectable}
+      selected={selected}
     />
   );
 }
@@ -142,6 +173,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   pressed: { opacity: 0.7 },
+  selected: {
+    borderWidth: 2,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+  },
   checkbox: {
     width: 24,
     height: 24,

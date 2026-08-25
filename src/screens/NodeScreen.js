@@ -45,6 +45,7 @@ import {
   DUE_HOME,
 } from '../lib/nodes';
 import ItemDue from '../components/ItemDue';
+import PickDestinationModal from '../components/PickDestinationModal';
 import { NodeCardView } from '../components/NodeCard';
 import { useNow } from '../lib/useNow';
 
@@ -74,6 +75,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     deleteNode,
     reorderChildren,
     toggleDone,
+    moveNodes,
+    copyNodes,
   } = useNodes();
   const { uid } = useAuth();
 
@@ -86,6 +89,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const [note, setNote] = useState(node?.note ?? '');
   const [reminders, setReminders] = useState(normalizeReminders(node?.reminders));
   const [addingDetail, setAddingDetail] = useState(false);
+  // Picking things to move or copy. `intent` is null when not selecting, and
+  // otherwise says which of the two is being done — the flow is identical
+  // right up to the last step, so it's one mode with two endings.
+  const [intent, setIntent] = useState(null);
+  const [picked, setPicked] = useState([]);
+  const [choosingDestination, setChoosingDestination] = useState(false);
   // A section is on screen if the node carries it, or if it was just added and
   // is waiting to be filled in.
   const [revealed, setRevealed] = useState({});
@@ -387,6 +396,62 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     [children]
   );
 
+  const selecting = intent !== null;
+
+  const startSelecting = useCallback((which) => {
+    setIntent(which);
+    setPicked([]);
+  }, []);
+
+  const stopSelecting = useCallback(() => {
+    setIntent(null);
+    setPicked([]);
+    setChoosingDestination(false);
+  }, []);
+
+  const togglePicked = useCallback((id) => {
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    );
+  }, []);
+
+  // Leaving the screen ends it. A selection is about the things in front of
+  // you, and carrying one to another list would mean picking things here and
+  // moving things there.
+  useEffect(() => {
+    setIntent(null);
+    setPicked([]);
+    setChoosingDestination(false);
+  }, [node?.id]);
+
+  const pickedNodes = useMemo(
+    () => children.filter((c) => picked.includes(c.id)),
+    [children, picked]
+  );
+
+  const applyDestination = useCallback(
+    async (parentId) => {
+      const doing = intent;
+      const chosen = pickedNodes;
+      setChoosingDestination(false);
+      stopSelecting();
+      if (!chosen.length) return;
+
+      try {
+        if (doing === 'copy') await copyNodes(chosen, parentId);
+        else await moveNodes(chosen, parentId);
+      } catch (err) {
+        VibeAlert(
+          doing === 'copy' ? 'Could not copy' : 'Could not move',
+          err?.message ?? 'Please try again.',
+          [],
+          'error'
+        );
+      }
+    },
+    [intent, pickedNodes, copyNodes, moveNodes, stopSelecting]
+  );
+
   return (
     <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
       {isRoot ? (
@@ -459,8 +524,12 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                 node={child}
                 index={index}
                 childCount={childCounts[child.id] ?? 0}
-                onPress={() => onOpen(child.id)}
-                onHold={() => onOpen(child.id)}
+                selectable={selecting}
+                selected={picked.includes(child.id)}
+                onPress={
+                  selecting ? () => togglePicked(child.id) : () => onOpen(child.id)
+                }
+                onHold={selecting ? undefined : () => onOpen(child.id)}
                 onToggle={() => toggleDone(child)}
               />
             )}
@@ -669,7 +738,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
           </View>
         )}
 
-        {isContainer && (
+        {isContainer && !selecting && (
           <View style={styles.footer}>
             {clearable.length > 0 && (
               <Pressable
@@ -682,11 +751,49 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
               </Pressable>
             )}
             <VibeButton label="Add" onPress={() => setAdding(true)} />
+
+            {/* Both start the same way, so they're offered together and the
+                choice of which is remembered until the destination is picked.
+                Only shown when there's something to act on. */}
+            {children.length > 0 && (
+              <View style={styles.footerLinks}>
+                <Pressable onPress={() => startSelecting('move')} hitSlop={8}>
+                  <Text style={styles.footerLink}>Move…</Text>
+                </Pressable>
+                <Pressable onPress={() => startSelecting('copy')} hitSlop={8}>
+                  <Text style={styles.footerLink}>Copy…</Text>
+                </Pressable>
+              </View>
+            )}
+
             {isRoot && (
               <Pressable onPress={() => setJoining(true)} hitSlop={8}>
                 <Text style={styles.joinLink}>Join with code</Text>
               </Pressable>
             )}
+          </View>
+        )}
+
+        {isContainer && selecting && (
+          <View style={styles.footer}>
+            <Text style={styles.selectHint}>
+              {picked.length
+                ? `${picked.length} selected`
+                : `Tap what you want to ${intent}`}
+            </Text>
+            <VibeButton
+              label={
+                intent === 'copy'
+                  ? `Copy ${picked.length || ''}`.trim()
+                  : `Move ${picked.length || ''}`.trim()
+              }
+              variant="green"
+              onPress={() => setChoosingDestination(true)}
+              disabled={!picked.length}
+            />
+            <Pressable onPress={stopSelecting} hitSlop={8}>
+              <Text style={styles.joinLink}>Cancel</Text>
+            </Pressable>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -704,6 +811,15 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
       />
 
       <JoinListModal visible={joining} onClose={() => setJoining(false)} />
+
+      <PickDestinationModal
+        visible={choosingDestination}
+        verb={intent === 'copy' ? 'Copy' : 'Move'}
+        moving={pickedNodes}
+        currentParentId={node?.id ?? null}
+        onClose={() => setChoosingDestination(false)}
+        onPick={applyDestination}
+      />
 
       {/* Mounted unconditionally, and visible only by their own flags.
           Wrapping these in a check on the node meant that the instant the node
@@ -908,6 +1024,25 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.main,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 8 },
+  footerLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 28,
+    marginTop: 10,
+  },
+  footerLink: {
+    color: theme.colors.vibeBlue,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: theme.fonts.main,
+  },
+  selectHint: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontFamily: theme.fonts.main,
+  },
   clearDone: {
     color: theme.colors.textSecondary,
     fontSize: 14,

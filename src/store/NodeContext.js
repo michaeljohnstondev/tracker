@@ -14,12 +14,18 @@ import {
   saveSharedMirror,
   makeNode,
   descendantsOf,
+  duplicateSubtree,
   childrenOf,
 } from '../lib/nodes';
 import { loadFiling, saveFiling } from '../lib/filing';
 import { useAuth } from './AuthContext';
 import * as remote from '../services/nodes';
 import VibeAlert from '../components/ui/VibeAlert';
+import {
+  syncNodeReminders,
+  syncGoalReminder,
+  clearItemReminders,
+} from '../services/reminders';
 
 const NodeContext = createContext(null);
 
@@ -314,9 +320,34 @@ export function NodeProvider({ children }) {
     [commitLocal]
   );
 
+  /** Drop the pending alarms for a node and everything under it. */
+  const forgetReminders = useCallback((node) => {
+    const doomed = [node, ...descendantsOf(allRef.current, node.id)];
+    doomed.forEach((n) => {
+      if (n.reminders?.length) clearItemReminders(n.id, n.reminders);
+      // A timer's goal alarm is keyed separately from the item's own alarms,
+      // so clearing one would otherwise leave the other to fire.
+      syncGoalReminder({
+        tracker: n,
+        uid,
+        key: `node_${n.id}`,
+        label: n.name,
+        startMs: null,
+        goalHours: null,
+      });
+    });
+  }, [uid]);
+
   const deleteNode = useCallback(
     async (node) => {
       if (!node) return;
+
+      // Alarms for something that no longer exists can only ever be wrong, and
+      // nothing else would remove them — the reminder documents outlive the
+      // node, deliberately, so that an alarm on a device-local node still
+      // works. The subtree goes too: deleting a category takes its children
+      // with it, and their alarms are just as orphaned.
+      forgetReminders(node);
 
       if (node.shared) {
         // Deleting the root of a shared tree ends it for everyone; deleting a
@@ -337,7 +368,7 @@ export function NodeProvider({ children }) {
       ]);
       commitLocal(localRef.current.filter((n) => !doomed.has(n.id)));
     },
-    [commitLocal, uid, setFiledUnder]
+    [commitLocal, uid, setFiledUnder, forgetReminders]
   );
 
   const moveNode = useCallback(
@@ -388,6 +419,55 @@ export function NodeProvider({ children }) {
     [setFiledUnder, updateNode, commitLocal, uid]
   );
 
+  /**
+   * Move several nodes at once.
+   *
+   * Sequential rather than parallel: moving into a shared tree publishes the
+   * node and then deletes the local copy, and two of those racing can have one
+   * read the local list while the other is midway through rewriting it.
+   */
+  const moveNodes = useCallback(
+    async (list, parentId) => {
+      for (const node of list) {
+        // Re-read it each time. A move can rewrite the ones after it — moving
+        // a category takes its children — so the copy captured when the
+        // selection was made may already be stale.
+        const current = allRef.current.find((n) => n.id === node.id);
+        if (current) await moveNode(current, parentId);
+      }
+    },
+    [moveNode]
+  );
+
+  /**
+   * Copy several nodes, and everything under them, into somewhere else.
+   *
+   * Where they land decides what they become: dropped into a shared list the
+   * copies are written to that tree and are shared from birth; anywhere else
+   * they're ordinary local nodes. That's the same rule moving already follows,
+   * so a copy doesn't need its own idea of what sharing means.
+   */
+  const copyNodes = useCallback(
+    async (list, parentId) => {
+      const target = parentId ? allRef.current.find((n) => n.id === parentId) : null;
+
+      const copies = list.flatMap((node) =>
+        duplicateSubtree(allRef.current, node, parentId ?? null)
+      );
+      if (!copies.length) return;
+
+      if (target?.shared) {
+        await Promise.all(
+          copies.map((copy) => remote.createNode(copy, target.rootId, uid))
+        );
+        return;
+      }
+
+      commitLocal([...localRef.current, ...copies]);
+    },
+    [commitLocal, uid]
+  );
+
   /** Reorder siblings by writing new positions to the ones that moved. */
   const reorderChildren = useCallback(
     (parentId, from, to) => {
@@ -406,12 +486,32 @@ export function NodeProvider({ children }) {
   );
 
   const toggleDone = useCallback(
-    (node) =>
-      updateNode(node, {
-        done: !node.done,
-        doneAt: !node.done ? Date.now() : null,
-        doneBy: !node.done ? uid ?? null : null,
-      }),
+    (node) => {
+      const done = !node.done;
+      const result = updateNode(node, {
+        done,
+        doneAt: done ? Date.now() : null,
+        doneBy: done ? uid ?? null : null,
+      });
+
+      // Crossing something off has to take its alarms with it. Nothing was
+      // going to: the sync already refuses to schedule anything for a done
+      // node, but the only thing calling it was the item's own screen — so
+      // ticking a box in a list left the alarm to go off for something already
+      // dealt with.
+      //
+      // Un-ticking puts them back, which is the same call: what's wanted is
+      // derived from the node's state, so both directions are one path rather
+      // than two that can disagree.
+      syncNodeReminders({
+        node: { ...node, done },
+        uid,
+        previous: node.reminders ?? [],
+        reminders: node.reminders ?? [],
+      });
+
+      return result;
+    },
     [updateNode, uid]
   );
 
@@ -485,6 +585,8 @@ export function NodeProvider({ children }) {
     updateNode,
     deleteNode,
     moveNode,
+    moveNodes,
+    copyNodes,
     reorderChildren,
     toggleDone,
     shareNode,
