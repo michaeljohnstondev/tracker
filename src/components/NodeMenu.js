@@ -1,39 +1,31 @@
-import React, { useMemo, useState } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React from 'react';
+import { Modal, Text, StyleSheet, Pressable } from 'react-native';
 import theme from '../theme/themes';
-import { useNodes } from '../store/NodeContext';
-import { filingTargets } from '../lib/nodes';
 
 /**
- * Everything you can do to a node, in one sheet off the header.
+ * Everything you can do here, in one sheet off the header.
  *
- * Moving is relative — out to where its parent lives, or into something
- * sitting alongside it — rather than a picker listing every node in the app.
- * Those are the moves you actually want, and the menu stays short however
- * large the tree grows. Anything that can't apply isn't shown at all.
+ * Moving used to live here as a one-at-a-time thing done to the node you were
+ * already inside: open it, find it in this menu, move it, go back, repeat.
+ * That's replaced by picking things off the list in front of you — so what
+ * this offers now is the way in to that, and the destination picker handles
+ * where they go. Moving the current node is done from its parent, alongside
+ * everything else there, which is the same job with one fewer special case.
+ *
+ * Also serves the home screen, which has no node of its own but is a list like
+ * any other and needs the same two actions.
  */
-export default function NodeMenu({ visible, node, onClose, onRename, onShare, onDelete }) {
-  const { nodes, moveNode } = useNodes();
-  const [choosing, setChoosing] = useState(false);
-
-  const parent = useMemo(
-    () => nodes.find((n) => n.id === node?.parentId) ?? null,
-    [nodes, node]
-  );
-
-  // Legal destinations that sit alongside this node.
-  const siblings = useMemo(() => {
-    if (!node) return [];
-    const legal = new Set(filingTargets(nodes, node).map((n) => n.id));
-    return nodes.filter(
-      (n) => legal.has(n.id) && (n.parentId ?? null) === (node.parentId ?? null)
-    );
-  }, [nodes, node]);
-
-  const close = () => {
-    setChoosing(false);
-    onClose();
-  };
+export default function NodeMenu({
+  visible,
+  node,
+  onClose,
+  onRename,
+  onShare,
+  onDelete,
+  onSelect,
+  canSelect = false,
+}) {
+  const close = () => onClose();
 
   // Close, then act once this sheet has actually gone.
   //
@@ -51,29 +43,24 @@ export default function NodeMenu({ visible, node, onClose, onRename, onShare, on
       <Pressable style={styles.overlay} onPress={close}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <Text style={styles.title} numberOfLines={1}>
-            {node?.name}
+            {node?.name ?? 'Home'}
           </Text>
 
-          {choosing ? (
-            <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.hint}>Move into…</Text>
-              {siblings.map((s) => (
-                <Pressable
-                  key={s.id}
-                  onPress={() => {
-                    moveNode(node, s.id);
-                    close();
-                  }}
-                  style={styles.row}
-                >
-                  <Text style={styles.rowIcon}>{s.shared ? '👥' : '🗂'}</Text>
-                  <Text style={styles.rowLabel} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          ) : (
+          {canSelect && (
+            <>
+              <Pressable onPress={() => run(() => onSelect?.('move'))} style={styles.row}>
+                <Text style={styles.rowIcon}>↔</Text>
+                <Text style={styles.rowLabel}>Move things…</Text>
+              </Pressable>
+
+              <Pressable onPress={() => run(() => onSelect?.('copy'))} style={styles.row}>
+                <Text style={styles.rowIcon}>⧉</Text>
+                <Text style={styles.rowLabel}>Copy things…</Text>
+              </Pressable>
+            </>
+          )}
+
+          {node && (
             <>
               <Pressable onPress={() => run(onRename)} style={styles.row}>
                 <Text style={styles.rowIcon}>✎</Text>
@@ -86,28 +73,6 @@ export default function NodeMenu({ visible, node, onClose, onRename, onShare, on
                   <Text style={styles.rowLabel}>
                     {node?.shared ? 'Invite someone' : 'Share'}
                   </Text>
-                </Pressable>
-              )}
-
-              {node?.parentId && (
-                <Pressable
-                  onPress={() => {
-                    moveNode(node, parent?.parentId ?? null);
-                    close();
-                  }}
-                  style={styles.row}
-                >
-                  <Text style={styles.rowIcon}>↑</Text>
-                  <Text style={styles.rowLabel}>
-                    {parent?.parentId ? 'Move up a level' : 'Move to home'}
-                  </Text>
-                </Pressable>
-              )}
-
-              {siblings.length > 0 && (
-                <Pressable onPress={() => setChoosing(true)} style={styles.row}>
-                  <Text style={styles.rowIcon}>↓</Text>
-                  <Text style={styles.rowLabel}>Move into…</Text>
                 </Pressable>
               )}
 

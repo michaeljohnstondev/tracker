@@ -457,6 +457,11 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
       {isRoot ? (
         <View style={styles.homeHeader}>
           <Text style={styles.homeTitle}>Tracker</Text>
+          {/* Home has no ScreenHeader, but it is a list like any other and
+              needs the same actions off it. */}
+          <Pressable onPress={() => setMenuOpen(true)} hitSlop={12}>
+            <Text style={styles.homeMenu}>⋯</Text>
+          </Pressable>
         </View>
       ) : (
         <ScreenHeader
@@ -752,19 +757,6 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
             )}
             <VibeButton label="Add" onPress={() => setAdding(true)} />
 
-            {/* Both start the same way, so they're offered together and the
-                choice of which is remembered until the destination is picked.
-                Only shown when there's something to act on. */}
-            {children.length > 0 && (
-              <View style={styles.footerLinks}>
-                <Pressable onPress={() => startSelecting('move')} hitSlop={8}>
-                  <Text style={styles.footerLink}>Move…</Text>
-                </Pressable>
-                <Pressable onPress={() => startSelecting('copy')} hitSlop={8}>
-                  <Text style={styles.footerLink}>Copy…</Text>
-                </Pressable>
-              </View>
-            )}
 
             {isRoot && (
               <Pressable onPress={() => setJoining(true)} hitSlop={8}>
@@ -844,6 +836,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
       <NodeMenu
         visible={menuOpen}
         node={node}
+        canSelect={isContainer && children.length > 0}
+        onSelect={startSelecting}
         onClose={() => setMenuOpen(false)}
         onRename={() => setRenaming(true)}
         onShare={() => setSharing(true)}
@@ -872,7 +866,20 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   flex: { flex: 1 },
-  homeHeader: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 8 },
+  homeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  homeMenu: {
+    color: theme.colors.vibeCyan,
+    fontSize: 26,
+    lineHeight: 28,
+    fontWeight: '700',
+  },
   homeTitle: {
     color: theme.colors.vibeCyan,
     fontSize: 22,
@@ -1024,18 +1031,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.main,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 8 },
-  footerLinks: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 28,
-    marginTop: 10,
-  },
-  footerLink: {
-    color: theme.colors.vibeBlue,
-    fontSize: 14,
-    fontWeight: '600',
-    fontFamily: theme.fonts.main,
-  },
   selectHint: {
     color: theme.colors.textSecondary,
     fontSize: 14,
