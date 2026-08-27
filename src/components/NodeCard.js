@@ -1,11 +1,11 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { runOnJS } from 'react-native-reanimated';
 import {
   useReorderableDrag,
   useReorderableDragEnd,
 } from 'react-native-reorderable-list';
-import theme from '../theme/themes';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { fmtElapsedShort, fmtDue, resolveColor } from '../lib/format';
 import { useNow } from '../lib/useNow';
 
@@ -25,7 +25,9 @@ export function NodeCardView({
   selectable = false,
   selected = false,
 }) {
-  const color = resolveColor(node.color);
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const color = resolveColor(node.color, theme);
   const running = node.startMs != null;
   const now = useNow(running);
 
@@ -159,15 +161,15 @@ export default function NodeCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: t.colors.inputBackground,
     borderWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     borderLeftWidth: 5,
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
     paddingVertical: 14,
     paddingHorizontal: 14,
     marginBottom: 10,
@@ -175,7 +177,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   selected: {
     borderWidth: 2,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: t.semantic.selectedFill,
   },
   checkbox: {
     width: 24,
@@ -187,7 +189,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   check: {
-    color: theme.colors.black,
+    color: t.colors.black,
     fontSize: 15,
     fontWeight: '900',
   },
@@ -200,26 +202,26 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   name: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     flexShrink: 1,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   nameDone: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   badge: { fontSize: 11, marginLeft: 7 },
   summary: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     marginTop: 3,
     fontVariant: ['tabular-nums'],
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   chevron: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 24,
     marginLeft: 8,
   },

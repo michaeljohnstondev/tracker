@@ -1,8 +1,57 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal } from 'react-native';
+import { View, Text, ScrollView, Pressable, Modal } from 'react-native';
 import { signOut } from '@react-native-firebase/auth';
-import theme from '../theme/themes';
+import { useThemedStyles } from '../theme/ThemeContext';
 import { auth } from '../services/firebase';
+
+/**
+ * The crash screen itself, split out of the class so it can use hooks — a
+ * class component cannot, and the report has to follow the active theme like
+ * every other screen. If the provider is what failed, useTheme falls back to
+ * the dark theme rather than throwing inside the error handler.
+ */
+function CrashReport({ error, componentStack, dismiss }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.screen}>
+      <Text style={styles.title}>Something broke</Text>
+      <ScrollView style={styles.scroll}>
+        <Text style={styles.message}>{String(error?.message || error)}</Text>
+        {/* The first few frames are the useful part; the rest is React's
+            own machinery. */}
+        <Text style={styles.stack}>
+          {String(error?.stack || '').split('\n').slice(0, 6).join('\n')}
+        </Text>
+        {componentStack ? (
+          <Text style={styles.stack}>
+            {componentStack.split('\n').slice(0, 8).join('\n')}
+          </Text>
+        ) : null}
+      </ScrollView>
+      <Pressable onPress={dismiss} style={styles.button}>
+        <Text style={styles.buttonText}>Try again</Text>
+      </Pressable>
+
+      {/* A way out of a crash that repeats on every launch. Whatever is
+          being loaded for the signed-in account stops being loaded, and the
+          app is usable again — without wiping the device's own data, which
+          is the only escape otherwise. Firebase is called directly here:
+          this can render in place of the providers, so there's no auth
+          context to reach. */}
+      <Pressable
+        onPress={() => {
+          signOut(auth).catch(() => {});
+          dismiss();
+        }}
+        style={[styles.button, styles.buttonQuiet]}
+      >
+        <Text style={[styles.buttonText, styles.buttonQuietText]}>
+          Sign out and try again
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 /**
  * Shows a crash instead of dying from it.
@@ -58,43 +107,11 @@ export default class ErrorBoundary extends React.Component {
 
   report(error, componentStack, dismiss) {
     return (
-      <View style={styles.screen}>
-        <Text style={styles.title}>Something broke</Text>
-        <ScrollView style={styles.scroll}>
-          <Text style={styles.message}>{String(error?.message || error)}</Text>
-          {/* The first few frames are the useful part; the rest is React's
-              own machinery. */}
-          <Text style={styles.stack}>
-            {String(error?.stack || '').split('\n').slice(0, 6).join('\n')}
-          </Text>
-          {componentStack ? (
-            <Text style={styles.stack}>
-              {componentStack.split('\n').slice(0, 8).join('\n')}
-            </Text>
-          ) : null}
-        </ScrollView>
-        <Pressable onPress={dismiss} style={styles.button}>
-          <Text style={styles.buttonText}>Try again</Text>
-        </Pressable>
-
-        {/* A way out of a crash that repeats on every launch. Whatever is
-            being loaded for the signed-in account stops being loaded, and the
-            app is usable again — without wiping the device's own data, which
-            is the only escape otherwise. Firebase is called directly here:
-            this can render in place of the providers, so there's no auth
-            context to reach. */}
-        <Pressable
-          onPress={() => {
-            signOut(auth).catch(() => {});
-            dismiss();
-          }}
-          style={[styles.button, styles.buttonQuiet]}
-        >
-          <Text style={[styles.buttonText, styles.buttonQuietText]}>
-            Sign out and try again
-          </Text>
-        </Pressable>
-      </View>
+      <CrashReport
+        error={error}
+        componentStack={componentStack}
+        dismiss={dismiss}
+      />
     );
   }
 
@@ -135,46 +152,46 @@ export default class ErrorBoundary extends React.Component {
   }
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   screen: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     padding: 24,
     paddingTop: 60,
   },
   title: {
-    color: theme.colors.vibeRed,
+    color: t.colors.vibeRed,
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 12,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   scroll: { flex: 1 },
   message: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 15,
     marginBottom: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   stack: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 11,
     lineHeight: 16,
     marginBottom: 16,
   },
   button: {
     borderWidth: 2,
-    borderColor: theme.colors.vibeBlue,
-    borderRadius: theme.sizes.borderRadius,
+    borderColor: t.colors.vibeBlue,
+    borderRadius: t.sizes.borderRadius,
     paddingVertical: 12,
     alignItems: 'center',
   },
   buttonText: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
-  buttonQuiet: { borderColor: theme.colors.gray, marginTop: 10 },
-  buttonQuietText: { color: theme.colors.gray },
+  buttonQuiet: { borderColor: t.colors.gray, marginTop: 10 },
+  buttonQuietText: { color: t.colors.gray },
 });

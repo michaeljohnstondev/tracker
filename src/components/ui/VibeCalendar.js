@@ -1,7 +1,7 @@
 // components/ui/base/VibeCalendar.jsx
 import React, { useState, useMemo, useCallback } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, Text, ScrollView } from 'react-native';
-import theme from '../../theme/themes';
+import { Modal, View, TouchableOpacity, Text, ScrollView } from 'react-native';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * Pure JS calendar component - no native dependencies
@@ -15,6 +15,7 @@ const VibeCalendar = ({
   minimumDate,
   maximumDate,
 }) => {
+  const styles = useThemedStyles(makeStyles);
   const [currentMonth, setCurrentMonth] = useState(() => {
     const date = initialDate || new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -203,19 +204,19 @@ const VibeCalendar = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: t.semantic.overlayStrong,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   container: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: theme.colors.vibeBlue,
+    borderColor: t.colors.vibeBlue,
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
@@ -227,25 +228,25 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 2,
-    borderBottomColor: theme.colors.vibeBlue,
+    borderBottomColor: t.colors.vibeBlue,
   },
   navButton: {
     padding: 8,
   },
   navButtonText: {
     fontSize: 32,
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontWeight: 'bold',
   },
   headerText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
   },
   weekDaysRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.vibeBlue,
+    borderBottomColor: t.colors.vibeBlue,
     paddingVertical: 12,
   },
   weekDayCell: {
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   weekDayText: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -274,9 +275,9 @@ const styles = StyleSheet.create({
   },
   selectedDay: {
     borderWidth: 3,
-    borderColor: theme.colors.vibeGreen,
+    borderColor: t.colors.vibeGreen,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 255, 65, 0.15)',
+    backgroundColor: t.colors.vibeBackgroundGreen,
   },
   todayDay: {
     // Removed - using selectedDay style instead
@@ -285,12 +286,12 @@ const styles = StyleSheet.create({
     opacity: 0.3,
   },
   dayText: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
     fontWeight: '400',
   },
   selectedDayText: {
-    color: theme.colors.vibeGreen,
+    color: t.colors.vibeGreen,
     fontWeight: 'bold',
     fontSize: 18,
   },
@@ -298,14 +299,14 @@ const styles = StyleSheet.create({
     // Removed - using selectedDayText style instead
   },
   disabledDayText: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 16,
     borderTopWidth: 2,
-    borderTopColor: theme.colors.vibeBlue,
+    borderTopColor: t.colors.vibeBlue,
     gap: 12,
   },
   cancelButton: {
@@ -314,11 +315,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: theme.colors.textSecondary,
+    borderColor: t.colors.textSecondary,
     backgroundColor: 'transparent',
   },
   cancelButtonText: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -329,11 +330,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: theme.colors.vibeBlue,
+    borderColor: t.colors.vibeBlue,
     backgroundColor: 'transparent',
   },
   confirmButtonText: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',

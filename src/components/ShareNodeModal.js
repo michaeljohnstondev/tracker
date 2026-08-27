@@ -3,13 +3,12 @@ import {
   Modal,
   View,
   Text,
-  StyleSheet,
   Pressable,
   Share,
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
-import theme from '../theme/themes';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
 import { useAuth } from '../store/AuthContext';
@@ -21,6 +20,8 @@ import { ensurePushPermission } from '../services/fcm';
 // Sign in, publish, hand over a code — one flow, one sheet. Splitting them
 // into separate screens would make a two-tap job feel like a setup wizard.
 export default function ShareNodeModal({ visible, node, onClose, onPublished }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { user, signIn, busy } = useAuth();
   const { shareNode } = useNodes();
 
@@ -239,56 +240,56 @@ export default function ShareNodeModal({ visible, node, onClose, onPublished }) 
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+const makeStyles = (t) => ({
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 34,
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 20,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 12,
   },
   body: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   code: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 40,
     fontWeight: '700',
     letterSpacing: 8,
     textAlign: 'center',
     marginTop: 20,
     fontVariant: ['tabular-nums'],
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   email: { marginTop: 18 },
   link: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   actions: { marginTop: 22, alignItems: 'stretch' },
   spinner: { marginTop: 14 },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 14,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

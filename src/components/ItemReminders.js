@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import theme from '../theme/themes';
+import { View, Text, TouchableOpacity } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 import VibeAlert from './ui/VibeAlert';
 import VibeCalendar from './ui/VibeCalendar';
 import VibeTimePicker from './ui/VibeTimePicker';
@@ -28,6 +28,7 @@ export function normalizeReminders(value) {
 }
 
 export default function ItemReminders({ value = [], onChange }) {
+  const styles = useThemedStyles(makeStyles);
   const [stage, setStage] = useState(null);
   const [pendingDate, setPendingDate] = useState(null);
   // The reminder being changed, or null when adding a new one. Editing and
@@ -153,13 +154,13 @@ export default function ItemReminders({ value = [], onChange }) {
 }
 
 // Card and row styling ported from bvs-app's ReminderListSection, with
-// fontFamily on theme.fonts.main since tracker's theme has no comicBold.
-const styles = StyleSheet.create({
+// fontFamily on t.fonts.main since tracker's theme has no comicBold.
+const makeStyles = (t) => ({
   card: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: theme.sizes.borderRadius,
+    backgroundColor: t.semantic.fieldFill,
+    borderRadius: t.sizes.borderRadius,
     borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
+    borderColor: t.colors.vibeBlue,
     overflow: 'hidden',
   },
   row: {
@@ -171,26 +172,26 @@ const styles = StyleSheet.create({
   },
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
+    borderBottomColor: t.colors.inputBorder,
   },
   rowMain: { flex: 1 },
   rowLabel: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
     fontWeight: '500',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   emptyText: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 14,
     fontStyle: 'italic',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   deleteBtn: {
     padding: 4,
   },
   deleteBtnText: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -199,9 +200,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   addRowText: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

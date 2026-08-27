@@ -1,6 +1,6 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet } from 'react-native';
-import theme from '../../theme/themes';
+import { Pressable, Text } from 'react-native';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * The ✕ that removes something. Ported from bvs-app so it feels the same here.
@@ -10,6 +10,7 @@ import theme from '../../theme/themes';
  * settles, which on a small target reads as the button not working.
  */
 export default function CloseButton({ onPress, style, textStyle, children = '✕' }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Pressable
       onPress={onPress}
@@ -27,10 +28,10 @@ export default function CloseButton({ onPress, style, textStyle, children = '✕
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   button: { padding: 8, justifyContent: 'center', alignItems: 'center' },
   text: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 20,
     fontWeight: '900',
     lineHeight: 22,

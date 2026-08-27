@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { Modal, View, Text, Pressable } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import { useKeyboardHeight } from '../lib/useKeyboardHeight';
@@ -9,6 +9,7 @@ import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 // expressed relatively — out a level, or into something alongside — rather
 // than as a picker listing everything in the app.
 export default function RenameModal({ visible, initialName, onClose, onSubmit }) {
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState(initialName ?? '');
   const keyboardHeight = useKeyboardHeight();
 
@@ -59,30 +60,30 @@ export default function RenameModal({ visible, initialName, onClose, onSubmit })
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+const makeStyles = (t) => ({
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 20,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 14,
   },
   actions: { marginTop: 22, alignItems: 'stretch' },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

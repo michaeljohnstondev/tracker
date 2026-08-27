@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { View, Text, Pressable } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 // Detail-screen top bar: a back chevron, a centered title tinted with the
 // tracker's color, and optional share / trash actions on the right.
 export default function ScreenHeader({ title, color, onBack, onRename, onMenu }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <Pressable onPress={onBack} hitSlop={12} style={styles.side}>
@@ -37,7 +38,7 @@ export default function ScreenHeader({ title, color, onBack, onRename, onMenu })
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -66,12 +67,12 @@ const styles = StyleSheet.create({
     fontSize: 19,
   },
   menuIcon: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 22,
     lineHeight: 26,
   },
   back: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 40,
     lineHeight: 42,
     marginTop: -4,
@@ -84,14 +85,14 @@ const styles = StyleSheet.create({
   },
   title: {
     textAlign: 'center',
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
     flexShrink: 1,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   pencil: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     marginLeft: 7,
   },

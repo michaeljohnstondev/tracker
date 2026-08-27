@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   View,
   Text,
-  StyleSheet,
   Pressable,
   ScrollView,
   KeyboardAvoidingView,
@@ -11,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ReorderableList from 'react-native-reorderable-list';
-import theme from '../theme/themes';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import VibeInput from '../components/ui/VibeInput';
 import VibeButton from '../components/ui/VibeButton';
 import VibeAlert from '../components/ui/VibeAlert';
@@ -66,6 +65,8 @@ const fmtGoal = (hours) => {
  * reminders. A node with none of those simply shows none of it.
  */
 export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const {
     nodes,
     loaded,
@@ -100,7 +101,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const [revealed, setRevealed] = useState({});
 
   const isRoot = !node;
-  const color = resolveColor(node?.color);
+  const color = resolveColor(node?.color, theme);
   const children = useMemo(
     () => childrenFor(node?.id ?? null),
     [childrenFor, node]
@@ -863,8 +864,8 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.colors.background },
+const makeStyles = (t) => ({
+  screen: { flex: 1, backgroundColor: t.colors.background },
   flex: { flex: 1 },
   homeHeader: {
     flexDirection: 'row',
@@ -875,27 +876,27 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   homeMenu: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 26,
     lineHeight: 28,
     fontWeight: '700',
   },
   homeTitle: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: 3,
     textTransform: 'uppercase',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   sharedNote: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 12,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     textAlign: 'center',
     marginBottom: 4,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   list: {
     paddingHorizontal: 24,
@@ -915,60 +916,60 @@ const styles = StyleSheet.create({
   // separating two sections is.
   visitors: { marginTop: -10 },
   empty: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   // No longer sits under a list, so it doesn't need to be pushed clear of one.
   details: {},
   label: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 18,
     marginBottom: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   note: { minHeight: 90, textAlignVertical: 'top' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingVertical: 8, paddingHorizontal: 16 },
   addLink: {
-    color: theme.colors.vibeBlue,
+    color: t.colors.vibeBlue,
     fontSize: 15,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   timerBox: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: t.semantic.fieldFill,
     borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
-    borderRadius: theme.sizes.borderRadius,
+    borderColor: t.colors.vibeBlue,
+    borderRadius: t.sizes.borderRadius,
     padding: 16,
     alignItems: 'center',
   },
   elapsed: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 40,
     fontWeight: '200',
     fontVariant: ['tabular-nums'],
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   goalLine: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 14,
     marginTop: 6,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   timerActions: { alignSelf: 'stretch', marginTop: 14 },
   endsAt: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 14,
     marginTop: 8,
     fontVariant: ['tabular-nums'],
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   // Sits over the corner rather than in the flow, so removing something never
   // shifts what's being read.
@@ -979,10 +980,10 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   counterBox: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: t.semantic.fieldFill,
     borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
-    borderRadius: theme.sizes.borderRadius,
+    borderColor: t.colors.vibeBlue,
+    borderRadius: t.sizes.borderRadius,
     padding: 16,
   },
   counterRow: {
@@ -995,28 +996,28 @@ const styles = StyleSheet.create({
   counterKey: {
     width: 68,
     height: 68,
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
     borderWidth: 2,
-    borderColor: theme.colors.vibeBlue,
+    borderColor: t.colors.vibeBlue,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  counterKeyDown: { backgroundColor: theme.colors.vibeBlue },
+  counterKeyDown: { backgroundColor: t.colors.vibeBlue },
   counterKeyLabel: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 32,
     fontWeight: '300',
     lineHeight: 38,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   count: {
     flex: 1,
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 48,
     fontWeight: '200',
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   counterLinks: {
     flexDirection: 'row',
@@ -1025,33 +1026,33 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   subtleLink: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     textDecorationLine: 'underline',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   footer: { paddingHorizontal: 24, paddingBottom: 8 },
   selectHint: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 10,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   clearDone: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     textDecorationLine: 'underline',
     marginBottom: 10,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   joinLink: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     marginTop: 10,
     textDecorationLine: 'underline',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

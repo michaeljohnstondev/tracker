@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { View, Text, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 import VibeCalendar from './ui/VibeCalendar';
 import VibeTimePicker from './ui/VibeTimePicker';
 import { fmtStart } from '../lib/format';
@@ -18,6 +18,7 @@ import { fmtStart } from '../lib/format';
  * the same gesture and shouldn't feel like different features.
  */
 export default function ItemDue({ dueAt, dueTo, targets, onChange }) {
+  const styles = useThemedStyles(makeStyles);
   const [stage, setStage] = useState(null);
   const [pendingDate, setPendingDate] = useState(null);
 
@@ -151,12 +152,12 @@ export default function ItemDue({ dueAt, dueTo, targets, onChange }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   card: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: theme.sizes.borderRadius,
+    backgroundColor: t.semantic.fieldFill,
+    borderRadius: t.sizes.borderRadius,
     borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
+    borderColor: t.colors.vibeBlue,
     overflow: 'hidden',
   },
   row: {
@@ -166,59 +167,59 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: theme.colors.inputBorder },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: t.colors.inputBorder },
   rowLabel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   rowValue: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
     fontWeight: '500',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   hint: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 34,
   },
   sheetTitle: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   option: {
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
+    borderBottomColor: t.colors.inputBorder,
   },
   optionLabel: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
-  optionChosen: { color: theme.colors.vibeGreen, fontWeight: '700' },
+  optionChosen: { color: t.colors.vibeGreen, fontWeight: '700' },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, View, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../../theme/themes';
+import { Alert, Modal, View, Text, Pressable } from 'react-native';
+import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * The app's own alert.
@@ -21,11 +21,14 @@ import theme from '../../theme/themes';
 // most callers aren't components and have no hooks to reach a context with.
 let present = null;
 
+// Names a hue rather than resolving one: this map is module scope, evaluated
+// once at import, so a resolved colour here would be frozen to whichever theme
+// happened to load first. The host looks the name up per render instead.
 const TYPES = {
-  info: { color: theme.colors.vibeCyan, icon: '' },
-  success: { color: theme.colors.vibeGreen, icon: '✅' },
-  warning: { color: theme.colors.vibeOrange, icon: '⚠️' },
-  error: { color: theme.colors.vibeRed, icon: '⛔' },
+  info: { color: 'vibeCyan', icon: '' },
+  success: { color: 'vibeGreen', icon: '✅' },
+  warning: { color: 'vibeOrange', icon: '⚠️' },
+  error: { color: 'vibeRed', icon: '⛔' },
 };
 
 export default function VibeAlert(title, message, buttons = [], type) {
@@ -62,6 +65,8 @@ export function VibeConfirm(title, message, onConfirm, onCancel) {
  * is exactly when you want to read both.
  */
 export function VibeAlertHost() {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [queue, setQueue] = useState([]);
 
   useEffect(() => {
@@ -88,7 +93,8 @@ export function VibeAlertHost() {
     dismiss(cancel?.onPress);
   }, [current, dismiss]);
 
-  const kind = TYPES[current?.type] ?? TYPES.info;
+  const kindSpec = TYPES[current?.type] ?? TYPES.info;
+  const kind = { color: theme.colors[kindSpec.color], icon: kindSpec.icon };
   // Two short buttons sit side by side; three, or one long one, read better
   // stacked.
   const stacked =
@@ -155,10 +161,10 @@ export function VibeAlertHost() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: t.semantic.overlayStrong,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,
@@ -166,7 +172,7 @@ const styles = StyleSheet.create({
   box: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderRadius: 14,
     borderWidth: 3,
     paddingHorizontal: 22,
@@ -185,15 +191,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     flexShrink: 1,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   message: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 20,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   buttons: { flexDirection: 'row', gap: 10 },
   buttonsStacked: { flexDirection: 'column' },
@@ -209,6 +215,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 15,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

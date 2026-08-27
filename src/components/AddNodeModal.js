@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import theme from '../theme/themes';
+import { Modal, View, Text, Pressable, ScrollView } from 'react-native';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import { NODE_COLORS } from '../lib/nodes';
@@ -12,6 +12,8 @@ import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 // timer, a list of children or a reminder is decided afterwards, on the thing
 // itself.
 export default function AddNodeModal({ visible, onClose, onCreate }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [name, setName] = useState('');
   const [color, setColor] = useState(NODE_COLORS[0]);
   const [kind, setKind] = useState('item');
@@ -82,7 +84,7 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
                   onPress={() => setColor(c)}
                   style={[
                     styles.swatch,
-                    { backgroundColor: resolveColor(c) },
+                    { backgroundColor: resolveColor(c, theme) },
                     c === color && styles.swatchSelected,
                   ]}
                 />
@@ -107,33 +109,33 @@ export default function AddNodeModal({ visible, onClose, onCreate }) {
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+const makeStyles = (t) => ({
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
     maxHeight: '88%',
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 20,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 8,
   },
   label: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginTop: 18,
     marginBottom: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingVertical: 8, paddingHorizontal: 14 },
@@ -148,14 +150,14 @@ const styles = StyleSheet.create({
   // Border only, no scale. Scaling pushed the selected swatch outside its own
   // box, and the first one in the row had its ring clipped by the sheet edge.
   swatchSelected: {
-    borderColor: theme.colors.white,
+    borderColor: t.colors.white,
   },
   actions: { marginTop: 26, alignItems: 'stretch' },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 6,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

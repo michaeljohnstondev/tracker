@@ -3,7 +3,7 @@ import { View, BackHandler } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import theme from './src/theme/themes';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { AuthProvider } from './src/store/AuthContext';
 import { NodeProvider, useNodes } from './src/store/NodeContext';
 import NodeScreen from './src/screens/NodeScreen';
@@ -56,16 +56,24 @@ function Router() {
   return <NodeScreen node={node} onOpen={open} onBack={goBack} onReplace={replace} />;
 }
 
-export default function App() {
+/**
+ * Split out of App so it sits *inside* ThemeProvider — the root background and
+ * the status bar both have to follow the active theme, and a component cannot
+ * consume a context its own parent provides.
+ */
+function Shell() {
   // Outside the providers: an update prompt shouldn't be gated on auth or
   // data having loaded, and should still appear if either fails.
   const { isUpdateReady, applyUpdate } = useAppUpdate();
+  const { theme, isDark } = useTheme();
 
   return (
     // Required by react-native-gesture-handler, which powers dragging.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        {/* Inverted on purpose: 'light' means light *glyphs*, which is what a
+            dark status bar needs. */}
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
           {/* Auth wraps nodes: the store subscribes to shared trees keyed on
               the signed-in uid, so it has to read auth state. */}
@@ -88,5 +96,13 @@ export default function App() {
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
   );
 }

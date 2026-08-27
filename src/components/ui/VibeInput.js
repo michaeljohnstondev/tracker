@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
-import { TextInput, StyleSheet } from 'react-native';
-import theme from '../../theme/themes';
+import { TextInput } from 'react-native';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 const VibeInput = forwardRef(({
   placeholder,
@@ -61,16 +61,16 @@ VibeInput.displayName = 'VibeInput';
 
 export default VibeInput;
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   input: {
     borderWidth: 3,
-    borderColor: theme.colors.vibeBlue,
-    borderRadius: theme.sizes.borderRadius,
-    padding: theme.sizes.inputPadding,
+    borderColor: t.colors.vibeBlue,
+    borderRadius: t.sizes.borderRadius,
+    padding: t.sizes.inputPadding,
     fontSize: 16,
-    fontFamily: theme.fonts.main,
-    color: theme.colors.textPrimary,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    fontFamily: t.fonts.main,
+    color: t.colors.textPrimary,
+    backgroundColor: t.semantic.fieldFill,
   },
   completedInput: {
     // Keep neon blue regardless of state

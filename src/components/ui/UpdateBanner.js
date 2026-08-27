@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import theme from '../../theme/themes';
+import { useThemedStyles } from '../../theme/ThemeContext';
 
 // A banner that appears once an OTA update has been downloaded and is ready
 // to apply. There's no dismiss: the whole point is to stop the app running a
@@ -12,6 +12,7 @@ import theme from '../../theme/themes';
 // doesn't depend on @expo/vector-icons) and with a safe-area offset, since
 // tracker's screens draw under the status bar.
 export default function UpdateBanner({ visible, onRestart }) {
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   if (!visible) return null;
 
@@ -37,7 +38,7 @@ export default function UpdateBanner({ visible, onRestart }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   banner: {
     position: 'absolute',
     top: 0,
@@ -52,10 +53,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#000',
+    backgroundColor: t.semantic.surface,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: theme.colors.vibeYellow,
+    borderColor: t.colors.vibeYellow,
     paddingVertical: 8,
     paddingLeft: 12,
     paddingRight: 6,
@@ -65,21 +66,21 @@ const styles = StyleSheet.create({
   },
   text: {
     flex: 1,
-    color: theme.colors.white,
+    color: t.colors.white,
     fontSize: 13,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   button: {
-    backgroundColor: theme.colors.vibeYellow,
+    backgroundColor: t.colors.vibeYellow,
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 10,
   },
   buttonText: {
-    color: theme.colors.black,
+    color: t.colors.black,
     fontSize: 13,
     fontWeight: 'bold',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

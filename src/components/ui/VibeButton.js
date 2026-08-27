@@ -1,20 +1,46 @@
 import React from 'react';
-import { Pressable, View, Text, StyleSheet } from 'react-native';
-import theme from '../../theme/themes';
+import { Pressable, View, Text } from 'react-native';
+import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
 
 /**
  * VibeButton with variants:
- * - default: transparent fill with neon border (cyan/blue)
+ * - default: accent button — neon-bordered on dark, solid-filled on light
  * - toggle: toggle-style button with color parameter
- * - red: red button with orange border for destructive actions
- * - green: green button with cyan border for positive actions
+ * - red: destructive action
+ * - green: positive action
  * Usage:
  * <VibeButton label="Click Me" onPress={...} />
  * <VibeButton onPress={...}>Click Me</VibeButton>
  * <VibeButton label="Toggle" onPress={...} variant="toggle" color="purple" />
  * <VibeButton label="Delete" onPress={...} variant="red" />
  * <VibeButton label="Join" onPress={...} variant="green" />
+ *
+ * The chunky asymmetric border (heavier on the bottom) is the brand signature
+ * and survives in both themes. What changes is what fills it: on dark the fill
+ * stays dim and the neon edge carries the button, on light the fill carries it
+ * and the edge drops to a darker shade of the same hue.
  */
+
+// Each toggle colour resolves to a hue plus its matching low-emphasis
+// background. Naming both halves here is what lets the light theme swap an
+// invisible 10%-alpha wash for an opaque tint without the component caring.
+const TOGGLE_COLORS = {
+  blue: ['vibeBlue', 'vibeBackgroundBlue'],
+  green: ['vibeGreen', 'vibeBackgroundGreen'],
+  orange: ['vibeOrange', 'vibeBackgroundOrange'],
+  purple: ['vibePurple', 'vibeBackgroundPurple'],
+  yellow: ['vibeYellow', 'vibeBackgroundYellow'],
+  pink: ['vibePink', 'vibeBackgroundPink'],
+  red: ['vibeRed', 'vibeBackgroundRed'],
+  cyan: ['vibeCyan', 'vibeBackgroundCyan'],
+  turquoise: ['vibeTurquoise', 'vibeBackgroundTurquoise'],
+  aqua: ['vibeAqua', 'vibeBackgroundAqua'],
+  teal: ['vibeTeal', 'vibeBackgroundTeal'],
+  electricBlue: ['vibeElectricBlue', 'vibeBackgroundElectricBlue'],
+  royalBlue: ['vibeRoyalBlue', 'vibeBackgroundRoyalBlue'],
+  gray: ['gray', 'vibeBackgroundGray'],
+};
+
 export default function VibeButton({
   label,
   children,
@@ -25,30 +51,30 @@ export default function VibeButton({
   color = 'blue',
   disabled = false,
 }) {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const buttonText = label || children;
 
-  const getColorValues = (colorName) => {
-    const colorMap = {
-      blue: theme.colors.vibeBlue,
-      green: theme.colors.vibeGreen,
-      orange: theme.colors.vibeOrange,
-      purple: theme.colors.vibePurple,
-      yellow: theme.colors.vibeYellow,
-      pink: theme.colors.vibePink,
-      red: theme.colors.vibeRed,
-      cyan: theme.colors.vibeCyan,
-      turquoise: theme.colors.vibeTurquoise,
-      aqua: theme.colors.vibeAqua,
-      teal: theme.colors.vibeTeal,
-      electricBlue: theme.colors.vibeElectricBlue,
-      royalBlue: theme.colors.vibeRoyalBlue,
-      gray: theme.colors.gray,
+  const getToggleColors = (colorName) => {
+    const [hueKey, bgKey] = TOGGLE_COLORS[colorName] || TOGGLE_COLORS.blue;
+    return {
+      hue: theme.colors[hueKey],
+      // On dark the translucent black recedes behind the neon edge; on light
+      // it would just be grey, so the hue's own tint takes over.
+      background: theme.isDark ? theme.semantic.fieldFill : theme.colors[bgKey],
     };
-    return colorMap[colorName] || theme.colors.vibeBlue;
   };
 
+  const pressableState = ({ pressed }) => [
+    {
+      opacity: pressed ? 0.7 : disabled ? 0.5 : 1,
+      transform: [{ scale: pressed ? 0.98 : 1 }],
+    },
+    style,
+  ];
+
   if (variant === 'toggle') {
-    const themeColor = getColorValues(color);
+    const { hue, background } = getToggleColors(color);
     return (
       <Pressable
         onPress={onPress}
@@ -58,13 +84,13 @@ export default function VibeButton({
         hitSlop={4}
         style={({ pressed }) => [
           styles.toggleButton,
-          { borderColor: themeColor },
+          { borderColor: hue, backgroundColor: background },
           { opacity: pressed ? 0.7 : disabled ? 0.5 : 1 },
           { transform: [{ scale: pressed ? 0.98 : 1 }] },
           style,
         ]}
       >
-        <Text style={[styles.toggleText, { color: themeColor }, textStyle]}>
+        <Text style={[styles.toggleText, { color: hue }, textStyle]}>
           {buttonText}
         </Text>
       </Pressable>
@@ -79,18 +105,14 @@ export default function VibeButton({
         delayPressIn={0}
         delayPressOut={0}
         hitSlop={4}
-        style={({ pressed }) => [
-          {
-            opacity: pressed ? 0.7 : disabled ? 0.5 : 1,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-          },
-          style,
-        ]}
+        style={pressableState}
       >
         <View style={styles.redOuterBorder}>
           <View style={styles.redSolidFill}>
             <View style={styles.buttonContent}>
-              <Text style={[styles.text, textStyle]}>{buttonText}</Text>
+              <Text style={[styles.text, styles.onDangerText, textStyle]}>
+                {buttonText}
+              </Text>
             </View>
           </View>
         </View>
@@ -106,18 +128,14 @@ export default function VibeButton({
         delayPressIn={0}
         delayPressOut={0}
         hitSlop={4}
-        style={({ pressed }) => [
-          {
-            opacity: pressed ? 0.7 : disabled ? 0.5 : 1,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-          },
-          style,
-        ]}
+        style={pressableState}
       >
         <View style={styles.greenOuterBorder}>
           <View style={styles.greenSolidFill}>
             <View style={styles.buttonContent}>
-              <Text style={[styles.text, textStyle]}>{buttonText}</Text>
+              <Text style={[styles.text, styles.onSuccessText, textStyle]}>
+                {buttonText}
+              </Text>
             </View>
           </View>
         </View>
@@ -125,7 +143,7 @@ export default function VibeButton({
     );
   }
 
-  // Default variant - neon border button
+  // Default variant
   return (
     <Pressable
       onPress={onPress}
@@ -135,8 +153,8 @@ export default function VibeButton({
       hitSlop={4}
       style={({ pressed }) => [
         {
-          opacity: (pressed && !disabled) ? 0.7 : 1,
-          transform: [{ scale: (pressed && !disabled) ? 0.98 : 1 }],
+          opacity: pressed && !disabled ? 0.7 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
         style,
       ]}
@@ -152,54 +170,56 @@ export default function VibeButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   // Default variant styles
   outerBorder: {
     borderBottomWidth: 4,
     borderLeftWidth: 3,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderColor: '#00FFFF',
-    borderRadius: theme.sizes.buttonRadius,
+    borderColor: t.semantic.accentBorder,
+    borderRadius: t.sizes.buttonRadius,
     marginVertical: 10,
   },
   gradientBorder: {
-    borderRadius: theme.sizes.buttonRadius - 4,
+    borderRadius: t.sizes.buttonRadius - 4,
     padding: 3,
     marginBottom: -0.5,
     marginLeft: -0.5,
-    backgroundColor: '#0072ff',
+    backgroundColor: t.semantic.accentInnerFill,
     overflow: 'hidden',
   },
   buttonContent: {
     backgroundColor: 'transparent',
-    borderRadius: theme.sizes.buttonRadius - 6,
+    borderRadius: t.sizes.buttonRadius - 6,
     paddingVertical: 10,
     paddingHorizontal: 20,
     alignItems: 'center',
     overflow: 'hidden',
   },
   text: {
-    color: theme.colors.textPrimary,
+    color: t.semantic.onAccent,
     fontSize: 16,
     fontWeight: 'bold',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
+  onDangerText: { color: t.semantic.onDanger },
+  onSuccessText: { color: t.semantic.onSuccess },
 
-  // Toggle variant styles
+  // Toggle variant styles — borderColor and backgroundColor are applied
+  // inline, since they depend on the `color` prop.
   toggleButton: {
     borderWidth: 3,
-    borderRadius: theme.sizes.buttonRadius,
+    borderRadius: t.sizes.buttonRadius,
     paddingVertical: 12,
     paddingHorizontal: 24,
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     marginVertical: 0,
   },
   toggleText: {
     fontSize: 16,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     textAlign: 'center',
   },
 
@@ -209,13 +229,13 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderColor: '#FFCC66',
-    borderRadius: theme.sizes.buttonRadius,
+    borderColor: t.semantic.dangerBorder,
+    borderRadius: t.sizes.buttonRadius,
     marginVertical: 10,
   },
   redSolidFill: {
-    backgroundColor: '#CC0033',
-    borderRadius: theme.sizes.buttonRadius - 4,
+    backgroundColor: t.semantic.dangerFill,
+    borderRadius: t.sizes.buttonRadius - 4,
     padding: 2,
     marginBottom: -0.5,
     marginLeft: -0.5,
@@ -228,13 +248,13 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderTopWidth: 3,
     borderRightWidth: 3,
-    borderColor: '#00FF41',
-    borderRadius: theme.sizes.buttonRadius,
+    borderColor: t.semantic.successBorder,
+    borderRadius: t.sizes.buttonRadius,
     marginVertical: 10,
   },
   greenSolidFill: {
-    backgroundColor: '#228B22',
-    borderRadius: theme.sizes.buttonRadius - 4,
+    backgroundColor: t.semantic.successFill,
+    borderRadius: t.sizes.buttonRadius - 4,
     padding: 2,
     marginBottom: -0.5,
     marginLeft: -0.5,

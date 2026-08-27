@@ -1,4 +1,4 @@
-import theme from '../theme/themes';
+import { darkTheme } from '../theme/themes';
 
 export const pad = (n) => String(n).padStart(2, '0');
 
@@ -135,6 +135,11 @@ export function isCountStale(item) {
 
 // Resolve a stored color name (e.g. 'vibeBlue') to its hex, with a
 // sensible fallback so a bad/missing value never crashes rendering.
-export function resolveColor(name) {
+//
+// The theme comes in as an argument rather than being imported: this module is
+// plain functions, not components, so it cannot read the active theme itself.
+// Callers that render pass the theme they already hold; the dark default keeps
+// non-rendering callers working unchanged.
+export function resolveColor(name, theme = darkTheme) {
   return theme.colors[name] || theme.colors.vibeBlue;
 }

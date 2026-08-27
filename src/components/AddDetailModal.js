@@ -1,6 +1,6 @@
 import React from 'react';
-import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { Modal, View, Text, Pressable } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 
 /**
  * What you can hang on an item: a note, a timer, a counter, an alarm, a repeat.
@@ -13,6 +13,7 @@ import theme from '../theme/themes';
  * second alarm is ordinary.
  */
 export default function AddDetailModal({ visible, node, onClose, onPick }) {
+  const styles = useThemedStyles(makeStyles);
   const options = [
     { key: 'note', icon: '📝', label: 'Note', hide: !!node?.note },
     { key: 'timer', icon: '⏱', label: 'Timer', hide: node?.goalHours != null || node?.startMs != null },
@@ -59,50 +60,50 @@ export default function AddDetailModal({ visible, node, onClose, onPick }) {
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+const makeStyles = (t) => ({
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 34,
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 18,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 10,
   },
   empty: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     paddingVertical: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
+    borderBottomColor: t.colors.inputBorder,
   },
   rowIcon: { fontSize: 17, width: 32 },
   rowLabel: {
     flex: 1,
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

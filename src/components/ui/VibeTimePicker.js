@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   Modal,
   Pressable,
@@ -12,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import theme from '../../theme/themes';
+import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
 
 // Constants
 const TIME_CONFIG = {
@@ -42,7 +41,10 @@ const formatDisplayTime = (hour, minute, period) => {
 };
 
 // Themed Picker Button Component
-const ThemedPickerButton = React.memo(({ label, onPress, selected }) => (
+const ThemedPickerButton = React.memo(({ label, onPress, selected }) => {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [
@@ -66,10 +68,14 @@ const ThemedPickerButton = React.memo(({ label, onPress, selected }) => (
       </View>
     )}
   </Pressable>
-));
+  );
+});
 
 // Done Button Component
-const DoneButton = React.memo(({ onPress, label = 'Done' }) => (
+const DoneButton = React.memo(({ onPress, label = 'Done' }) => {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
   <Pressable
     onPress={onPress}
     style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }, styles.doneButton]}
@@ -83,7 +89,8 @@ const DoneButton = React.memo(({ onPress, label = 'Done' }) => (
       <Text style={styles.doneButtonText}>{label}</Text>
     </LinearGradient>
   </Pressable>
-));
+  );
+});
 
 // Time Column Component with circular scrolling
 const TimeColumn = React.memo(
@@ -95,6 +102,7 @@ const TimeColumn = React.memo(
     circular = false,
     isInitialMount = false,
   }) => {
+    const styles = useThemedStyles(makeStyles);
     const scrollViewRef = React.useRef(null);
     const hasSetInitialPosition = React.useRef(false);
 
@@ -229,6 +237,7 @@ const VibeTimePicker = ({
   cancelText = 'Cancel',
   confirmText = 'Done',
 }) => {
+  const styles = useThemedStyles(makeStyles);
   // Get safe area insets (fallback for devices without safe area context)
   const getBottomPadding = () => {
     const { height } = Dimensions.get('window');
@@ -378,14 +387,14 @@ const VibeTimePicker = ({
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Reduced opacity for less fade
+    backgroundColor: t.semantic.overlay, // Reduced opacity for less fade
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     // paddingBottom removed from here, now handled dynamically
@@ -409,10 +418,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   columnLabel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 16, // Slightly larger
     fontWeight: '600', // Bolder
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     flex: 1,
     textAlign: 'center',
   },
@@ -425,40 +434,40 @@ const styles = StyleSheet.create({
     width: 70, // Fixed width for consistent sizing
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
     marginVertical: 3, // Total height with margin = 56px
   },
   selectedPickerGradient: {
     height: '100%',
     width: '100%',
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
     justifyContent: 'center',
     alignItems: 'center',
   },
   selectedPickerText: {
-    color: '#000',
+    color: t.semantic.onGradient,
     fontSize: 18,
     fontWeight: '600',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   unselectedPickerButton: {
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: t.colors.inputBackground,
     borderWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
   },
   unselectedPickerContent: {
     height: '100%',
     width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.sizes.borderRadius,
+    backgroundColor: t.colors.background,
+    borderRadius: t.sizes.borderRadius,
   },
   unselectedPickerText: {
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 18,
     fontWeight: '500',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   periodSelection: {
     alignItems: 'center',
@@ -470,21 +479,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
   },
   doneButtonGradient: {
     height: 50,
     width: '100%',
-    borderRadius: theme.sizes.borderRadius,
+    borderRadius: t.sizes.borderRadius,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 15,
   },
   doneButtonText: {
-    color: '#000',
+    color: t.semantic.onGradient,
     fontSize: 16,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });
 

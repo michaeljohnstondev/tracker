@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, View, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { Modal, View, Text, Pressable } from 'react-native';
+import { useThemedStyles } from '../theme/ThemeContext';
 import VibeInput from './ui/VibeInput';
 import VibeButton from './ui/VibeButton';
 import VibeAlert from './ui/VibeAlert';
@@ -13,6 +13,7 @@ import { useKeyboardHeight } from '../lib/useKeyboardHeight';
 // meditation. Hours are accepted as a decimal so "1.5" works without needing
 // a separate minutes field.
 export default function GoalModal({ visible, initialHours, onClose, onSubmit }) {
+  const styles = useThemedStyles(makeStyles);
   const [text, setText] = useState('');
   const keyboardHeight = useKeyboardHeight();
 
@@ -81,34 +82,34 @@ export default function GoalModal({ visible, initialHours, onClose, onSubmit }) 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (t) => ({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: t.semantic.overlay,
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 20,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 8,
   },
   body: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 14,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   input: {
     textAlign: 'center',
@@ -119,10 +120,10 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
   },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 8,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });

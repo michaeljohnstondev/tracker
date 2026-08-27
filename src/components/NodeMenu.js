@@ -1,6 +1,6 @@
 import React from 'react';
-import { Modal, Text, StyleSheet, Pressable } from 'react-native';
-import theme from '../theme/themes';
+import { Modal, Text, Pressable } from 'react-native';
+import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 
 /**
  * Everything you can do here, in one sheet off the header.
@@ -25,6 +25,8 @@ export default function NodeMenu({
   onSelect,
   canSelect = false,
 }) {
+  const { isDark, toggleTheme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const close = () => onClose();
 
   // Close, then act once this sheet has actually gone.
@@ -83,6 +85,16 @@ export default function NodeMenu({
             </>
           )}
 
+          {/* Deliberately not routed through run(): leaving the sheet open
+              is the point, so the switch is visible as it happens rather than
+              landing on a screen that has already changed. */}
+          <Pressable onPress={toggleTheme} style={styles.row}>
+            <Text style={styles.rowIcon}>{isDark ? '☀' : '☾'}</Text>
+            <Text style={styles.rowLabel}>
+              {isDark ? 'Light theme' : 'Dark theme'}
+            </Text>
+          </Pressable>
+
           <Pressable onPress={close} hitSlop={8}>
             <Text style={styles.cancel}>Cancel</Text>
           </Pressable>
@@ -92,55 +104,55 @@ export default function NodeMenu({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+const makeStyles = (t) => ({
+  overlay: { flex: 1, backgroundColor: t.semantic.overlay, justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: t.colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,
-    borderColor: theme.colors.inputBorder,
+    borderColor: t.colors.inputBorder,
     paddingHorizontal: 24,
     paddingTop: 22,
     paddingBottom: 34,
     maxHeight: '80%',
   },
   title: {
-    color: theme.colors.vibeCyan,
+    color: t.colors.vibeCyan,
     fontSize: 18,
     fontWeight: '700',
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
     marginBottom: 10,
   },
   scroll: { flexGrow: 0 },
   hint: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 13,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     marginBottom: 6,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBorder,
+    borderBottomColor: t.colors.inputBorder,
   },
-  rowIcon: { fontSize: 17, width: 32, color: theme.colors.textPrimary },
+  rowIcon: { fontSize: 17, width: 32, color: t.colors.textPrimary },
   rowLabel: {
     flex: 1,
-    color: theme.colors.textPrimary,
+    color: t.colors.textPrimary,
     fontSize: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
-  destructive: { color: theme.colors.vibeRed },
+  destructive: { color: t.colors.vibeRed },
   cancel: {
-    color: theme.colors.textSecondary,
+    color: t.colors.textSecondary,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 16,
-    fontFamily: theme.fonts.main,
+    fontFamily: t.fonts.main,
   },
 });
