@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { TextInput } from 'react-native';
-import { useThemedStyles } from '../../theme/ThemeContext';
+import { useTheme, useThemedStyles } from '../../theme/ThemeContext';
 
 const VibeInput = forwardRef(({
   placeholder,
@@ -25,6 +25,9 @@ const VibeInput = forwardRef(({
   maxLength,
   ...otherProps
 }, ref) => {
+  const { theme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const placeholderColor = theme.semantic.textMuted;
   return (
     <TextInput
       ref={ref}
@@ -45,7 +48,7 @@ const VibeInput = forwardRef(({
       spellCheck={spellCheck}
       dataDetectorTypes={dataDetectorTypes}
       maxLength={maxLength}
-      placeholderTextColor="#aaa"
+      placeholderTextColor={placeholderColor}
       style={[
         styles.input,
         isCompleted && styles.completedInput,
