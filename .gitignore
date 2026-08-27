@@ -4,3 +4,10 @@ dist/
 web-build/
 *.log
 .DS_Store
+
+# Env / signing
+.env
+.env.*
+!.env.example
+credentials.json
+credentials/
