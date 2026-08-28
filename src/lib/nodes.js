@@ -188,15 +188,24 @@ export function duplicateSubtree(nodes, node, parentId = null) {
 
 // ---- Persistence ---------------------------------------------------------
 
+/**
+ * Throws when the stored lists cannot be read, rather than reporting none.
+ *
+ * It used to swallow the failure and return an empty array, which is
+ * indistinguishable from a phone that genuinely has no lists — and the next
+ * edit would save that emptiness straight over the top of the real data. This
+ * is the same failure the shared mirror below was built to survive; the
+ * device's own lists had no such protection. Nothing absent is an error:
+ * missing storage really does mean a new install, and returns nothing.
+ */
 export async function loadNodes() {
   const raw = await AsyncStorage.getItem(KEY);
   if (raw == null) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error('the stored lists are not in the expected shape');
   }
+  return parsed;
 }
 
 export async function saveNodes(nodes) {

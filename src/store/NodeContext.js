@@ -58,6 +58,12 @@ export function NodeProvider({ children }) {
   const localRef = useRef([]);
   localRef.current = localNodes;
 
+  // Set when the device's own lists could not be read. While it is true the
+  // app still works, but nothing is written back — an edit made on top of a
+  // failed read would otherwise persist the gap and destroy the real data.
+  const readFailed = useRef(false);
+  const loadedRef = useRef(false);
+
   // The device's own copy of the shared trees, and whether the server has said
   // anything yet this session.
   const mirrorRef = useRef(null);
@@ -68,14 +74,34 @@ export function NodeProvider({ children }) {
 
   useEffect(() => {
     (async () => {
-      const [nodes, savedFiling, mirror] = await Promise.all([
-        loadNodes(),
+      const [savedFiling, mirror] = await Promise.all([
         loadFiling(),
         loadSharedMirror(),
       ]);
+
+      // Kept apart from the other two: a failure here is the one that can cost
+      // you data, and it must not be confused with having none.
+      let nodes = [];
+      try {
+        nodes = await loadNodes();
+      } catch (err) {
+        readFailed.current = true;
+        VibeAlert(
+          'Could not read your lists',
+          `They are still on the phone — this is a failure to read them, not a deletion. Nothing will be saved over them until the app can read them again.
+
+${
+            err?.message || err
+          }`,
+          [],
+          'error'
+        );
+      }
+
       setLocalNodes(nodes);
       setFiling(savedFiling);
       mirrorRef.current = mirror;
+      loadedRef.current = true;
       setLoaded(true);
     })();
   }, []);
@@ -98,6 +124,11 @@ export function NodeProvider({ children }) {
   const commitLocal = useCallback((next) => {
     setLocalNodes(next);
     localRef.current = next;
+    // Two ways an edit can be built on top of lists we do not actually have:
+    // the read failed, or it has not finished yet. Writing in either case
+    // saves a subset over the whole, so the change stays on screen for this
+    // session and the stored copy is left intact.
+    if (readFailed.current || !loadedRef.current) return;
     saveNodes(next);
   }, []);
 

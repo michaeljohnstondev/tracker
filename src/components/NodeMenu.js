@@ -1,6 +1,8 @@
 import React from 'react';
 import { Modal, Text, Pressable } from 'react-native';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
+import { useAuth } from '../store/AuthContext';
+import { VibeConfirm } from './ui/VibeAlert';
 
 /**
  * Everything you can do here, in one sheet off the header.
@@ -26,6 +28,7 @@ export default function NodeMenu({
   canSelect = false,
 }) {
   const { isDark, toggleTheme } = useTheme();
+  const { user, signOut } = useAuth();
   const styles = useThemedStyles(makeStyles);
   const close = () => onClose();
 
@@ -81,6 +84,36 @@ export default function NodeMenu({
               <Pressable onPress={() => run(onDelete)} style={styles.row}>
                 <Text style={styles.rowIcon}>🗑</Text>
                 <Text style={[styles.rowLabel, styles.destructive]}>Delete</Text>
+              </Pressable>
+            </>
+          )}
+
+          {/* Which account this is, and the way off it.
+              
+              Both were unreachable before: sign-out existed only on the crash
+              screen, and the signed-in address was shown nowhere at all. So a
+              phone signed in as the wrong person looked identical to one that
+              had lost its lists — the shared trees are keyed to the account,
+              and there was no way to see which account that was. */}
+          {user && (
+            <>
+              <Text style={styles.account} numberOfLines={1}>
+                Signed in as {user.email}
+              </Text>
+              <Pressable
+                onPress={() =>
+                  run(() =>
+                    VibeConfirm(
+                      'Sign out?',
+                      'Shared lists need an account, so they go until you sign back in. Lists that live only on this phone are not touched.',
+                      () => signOut()
+                    )
+                  )
+                }
+                style={styles.row}
+              >
+                <Text style={styles.rowIcon}>⎋</Text>
+                <Text style={styles.rowLabel}>Sign out</Text>
               </Pressable>
             </>
           )}
@@ -148,6 +181,13 @@ const makeStyles = (t) => ({
     fontFamily: t.fonts.main,
   },
   destructive: { color: t.colors.vibeRed },
+  account: {
+    color: t.colors.textSecondary,
+    fontSize: 13,
+    fontFamily: t.fonts.main,
+    marginTop: 14,
+    marginBottom: 2,
+  },
   cancel: {
     color: t.colors.textSecondary,
     fontSize: 15,
