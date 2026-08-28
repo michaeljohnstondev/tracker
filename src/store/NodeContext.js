@@ -18,6 +18,7 @@ import {
   childrenOf,
 } from '../lib/nodes';
 import { loadFiling, saveFiling } from '../lib/filing';
+import { recoverLegacyTrackers, markLegacyRecovered } from '../lib/legacy';
 import { useAuth } from './AuthContext';
 import * as remote from '../services/nodes';
 import VibeAlert from '../components/ui/VibeAlert';
@@ -96,6 +97,29 @@ ${
           [],
           'error'
         );
+      }
+
+      // An empty store on a phone that used the app before the node rewrite
+      // means the old keys were never brought across. Only attempted when
+      // there is genuinely nothing to lose, and never when the read failed —
+      // an unreadable store is not an empty one.
+      if (!readFailed.current && !nodes.length) {
+        try {
+          const recovered = await recoverLegacyTrackers();
+          if (recovered?.length) {
+            await saveNodes(recovered);
+            await markLegacyRecovered();
+            nodes = recovered;
+            VibeAlert(
+              'Your lists are back',
+              `${recovered.length} things were still stored the way an older version of the app kept them, and had stopped being read. They have been brought across.`,
+              [],
+              'success'
+            );
+          }
+        } catch (err) {
+          reportRemote('recovering lists from an older version', err);
+        }
       }
 
       setLocalNodes(nodes);
