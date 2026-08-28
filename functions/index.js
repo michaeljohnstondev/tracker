@@ -84,7 +84,17 @@ async function pushToUsers(uids, { title, body, data = {} }) {
   );
 
   const targets = tokenDocs.filter((t) => t?.token);
-  if (!targets.length) return { sent: 0 };
+  if (!targets.length) {
+    // The quiet failure this had for a long time. A member with no stored
+    // token is not an error and never was logged, so "nobody is registered"
+    // and "everybody was notified" looked identical from here — which is
+    // exactly the state a silently-denied notification permission leaves you
+    // in after reinstalling the app.
+    console.warn(
+      `[push] no device tokens for ${uids.length} recipient(s): ${uids.join(', ')}`
+    );
+    return { sent: 0 };
+  }
 
   const response = await messaging.sendEachForMulticast({
     tokens: targets.map((t) => t.token),
@@ -113,6 +123,17 @@ async function pushToUsers(uids, { title, body, data = {} }) {
       db.collection('users').doc(uid).collection('private').doc('push').delete()
     )
   );
+
+  console.log(
+    `[push] "${title}" -> ${response.successCount}/${targets.length} sent` +
+      (response.failureCount ? `, ${response.failureCount} failed` : '') +
+      (dead.length ? `, ${dead.length} stale token(s) pruned` : '')
+  );
+  response.responses.forEach((r, i) => {
+    if (!r.success) {
+      console.warn(`[push] ${targets[i].uid}: ${r.error?.code || r.error}`);
+    }
+  });
 
   return { sent: response.successCount, pruned: dead.length };
 }

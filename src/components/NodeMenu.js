@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Text, Pressable } from 'react-native';
 import { useTheme, useThemedStyles } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
+import { hasPushPermission, ensurePushPermission } from '../services/fcm';
 import { VibeConfirm } from './ui/VibeAlert';
 
 /**
@@ -29,6 +30,25 @@ export default function NodeMenu({
 }) {
   const { isDark, toggleTheme } = useTheme();
   const { user, signOut } = useAuth();
+
+  // Whether this device will actually receive anything.
+  //
+  // Reinstalling the app resets the OS notification permission, and the silent
+  // token registration gives up without a word when it is missing — so pushes
+  // simply stop, with nothing on screen ever saying so. Nothing re-asks except
+  // sharing, joining, or setting a reminder, none of which you necessarily do
+  // again. Showing the state is what makes it fixable.
+  const [pushOn, setPushOn] = useState(null);
+  useEffect(() => {
+    if (!visible || !user) return;
+    let cancelled = false;
+    hasPushPermission().then((ok) => {
+      if (!cancelled) setPushOn(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, user]);
   const styles = useThemedStyles(makeStyles);
   const close = () => onClose();
 
@@ -100,6 +120,22 @@ export default function NodeMenu({
               <Text style={styles.account} numberOfLines={1}>
                 Signed in as {user.email}
               </Text>
+
+              {pushOn === false && (
+                <Pressable
+                  onPress={() =>
+                    ensurePushPermission(user.uid).then((token) =>
+                      setPushOn(!!token)
+                    )
+                  }
+                  style={styles.row}
+                >
+                  <Text style={styles.rowIcon}>🔕</Text>
+                  <Text style={styles.rowLabel}>
+                    Notifications are off — turn on
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() =>
                   run(() =>
