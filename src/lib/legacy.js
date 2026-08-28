@@ -123,11 +123,16 @@ function toNodes(trackers, parents, order) {
 /**
  * Returns the recovered nodes, or null when there is nothing to recover.
  *
- * Only ever called with an empty `nodes.v1`, and it never writes to the old
- * keys, so the worst case is that it finds nothing and the app opens exactly
- * as it would have.
+ * `existing` is whatever nodes.v1 already holds. Anything whose id is already
+ * there is skipped, so this adds and never overwrites — which matters because
+ * someone who opened the app, found it empty and started typing should still
+ * get their old lists back alongside what they just made. Requiring an empty
+ * store would have quietly refused them.
+ *
+ * It never writes to the old keys, so the worst case is that it finds nothing
+ * and the app opens exactly as it would have.
  */
-export async function recoverLegacyTrackers() {
+export async function recoverLegacyTrackers(existing = []) {
   const already = await AsyncStorage.getItem(DONE_KEY);
   if (already) return null;
 
@@ -150,7 +155,20 @@ export async function recoverLegacyTrackers() {
     Array.isArray(order) ? order : []
   );
 
-  return nodes.length ? nodes : null;
+  const taken = new Set(existing.map((n) => n?.id));
+  const fresh = nodes.filter((n) => !taken.has(n.id));
+
+  // A parent that did not survive the filter would leave its children
+  // unreachable, so anything whose parent is not coming across sits at the
+  // top level instead. Better visible in the wrong place than invisible.
+  const arriving = new Set(fresh.map((n) => n.id));
+  fresh.forEach((n) => {
+    if (n.parentId && !arriving.has(n.parentId) && !taken.has(n.parentId)) {
+      n.parentId = null;
+    }
+  });
+
+  return fresh.length ? fresh : null;
 }
 
 /** Called once the recovered nodes are safely stored. */

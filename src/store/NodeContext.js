@@ -99,17 +99,18 @@ ${
         );
       }
 
-      // An empty store on a phone that used the app before the node rewrite
-      // means the old keys were never brought across. Only attempted when
-      // there is genuinely nothing to lose, and never when the read failed —
-      // an unreadable store is not an empty one.
-      if (!readFailed.current && !nodes.length) {
+      // A phone that used the app before the node rewrite still has its lists
+      // under the old keys, never brought across. Attempted once per device,
+      // and never when the read failed — an unreadable store is not an empty
+      // one, and merging into it would write a subset back over the whole.
+      if (!readFailed.current) {
         try {
-          const recovered = await recoverLegacyTrackers();
+          const recovered = await recoverLegacyTrackers(nodes);
           if (recovered?.length) {
-            await saveNodes(recovered);
+            const merged = [...nodes, ...recovered];
+            await saveNodes(merged);
             await markLegacyRecovered();
-            nodes = recovered;
+            nodes = merged;
             VibeAlert(
               'Your lists are back',
               `${recovered.length} things were still stored the way an older version of the app kept them, and had stopped being read. They have been brought across.`,
