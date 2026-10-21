@@ -140,6 +140,19 @@ service cloud.firestore {
             || ownsTree(request.resource.data.rootId)
             || inviteGrants(request.resource.data.rootId));
 
+      // Re-writing your own row. setDoc is an update rather than a create
+      // once the document exists, and without this joining a list you are
+      // already in - or re-entering a code after any hiccup - failed with a
+      // bare permission-denied rather than being the no-op it should be.
+      //
+      // Narrow on purpose: it can only ever rewrite YOUR row, it cannot move
+      // it to another person, and it cannot repoint it at another tree. So it
+      // grants nothing a fresh create would not have granted anyway.
+      allow update: if signedIn()
+        && resource.data.uid == uid()
+        && request.resource.data.uid == uid()
+        && request.resource.data.rootId == resource.data.rootId;
+
       // Leaving is deleting your own row; an owner may also remove someone.
       allow delete: if signedIn()
         && (resource.data.uid == uid() || ownsTree(resource.data.rootId));

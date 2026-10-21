@@ -282,13 +282,26 @@ export async function redeemInvite(code, uid) {
 
   if (snapExists(snap)) {
     const { rootId } = snapData(snap);
-    await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
-      rootId,
-      uid,
-      role: 'member',
-      joinedAt: Date.now(),
-      usedInviteCode: asCode,
-    });
+    // Wrapped, unlike before. A refusal here used to reach the user as a bare
+    // "permission denied", which reads like the app is broken when the usual
+    // causes are mundane - and gave no hint which of them it was.
+    try {
+      await setDoc(doc(db, 'memberships', membershipId(rootId, uid)), {
+        rootId,
+        uid,
+        role: 'member',
+        joinedAt: Date.now(),
+        usedInviteCode: asCode,
+      });
+    } catch (err) {
+      throw new Error(
+        `That code is valid, but joining was refused.
+
+${err?.message || err}
+
+The list it points at may have been deleted, or the invitation may have been withdrawn. Ask for a fresh code.`
+      );
+    }
     return rootId;
   }
 
