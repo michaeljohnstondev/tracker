@@ -90,10 +90,12 @@ export function NodeCardView({
 
       <View style={styles.text}>
         <View style={styles.nameRow}>
-          <Text
-            style={[styles.name, node.done && styles.nameDone]}
-            numberOfLines={1}
-          >
+          {/* No line clamp. A card is a thing you wrote the name of, and
+              a name clipped to one line with an ellipsis is the one
+              version of it you cannot read - which on a list of similar
+              items is exactly when you need the end of it. The card has
+              no fixed height, so it grows instead. */}
+          <Text style={[styles.name, node.done && styles.nameDone]}>
             {node.name}
           </Text>
           {node.shared ? <Text style={styles.badge}>👥</Text> : null}
@@ -101,10 +103,7 @@ export function NodeCardView({
           {node.reminders?.length ? <Text style={styles.badge}>🔔</Text> : null}
         </View>
         {bits.length > 0 && (
-          <Text
-            style={[styles.summary, reached && { color: theme.colors.vibeGreen }]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.summary, reached && { color: theme.colors.vibeGreen }]}>
             {bits.join(' · ')}
           </Text>
         )}
@@ -200,11 +199,16 @@ const makeStyles = (t) => ({
     textAlign: 'center',
   },
   text: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  // flex-start so the badges stay level with the first line of a name
+  // that now wraps, rather than drifting to the middle of the block.
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start' },
   name: {
     color: t.colors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
+    // flex, not just flexShrink: shrink lets it give up space, flex
+    // gives it a definite width to wrap inside once badges share the row.
+    flex: 1,
     flexShrink: 1,
     fontFamily: t.fonts.main,
   },

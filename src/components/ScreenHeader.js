@@ -19,7 +19,11 @@ export default function ScreenHeader({ title, color, onBack, onRename, onMenu })
         hitSlop={8}
         style={({ pressed }) => [styles.titleWrap, pressed && { opacity: 0.6 }]}
       >
-        <Text style={[styles.title, color && { color }]} numberOfLines={1}>
+        {/* No clamp here either. This is the name of the thing you are
+            looking at, and the header is the one place it should be
+            readable in full. Nothing fixes the row's height, so it grows
+            to fit. */}
+        <Text style={[styles.title, color && { color }]}>
           {title}
         </Text>
         {onRename ? <Text style={styles.pencil}>✎</Text> : null}
