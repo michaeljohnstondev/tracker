@@ -3,7 +3,8 @@ import { Modal, View, Text, Pressable } from 'react-native';
 import { useThemedStyles } from '../theme/ThemeContext';
 
 /**
- * What you can hang on an item: a note, a timer, a counter, an alarm, a repeat.
+ * What you can hang on an item: a note, a link, a timer, a counter, an alarm,
+ * a repeat.
  *
  * They're offered here rather than laid out permanently on the screen, so an
  * item shows only what it actually carries. A shopping list entry is a line of
@@ -16,6 +17,7 @@ export default function AddDetailModal({ visible, node, onClose, onPick }) {
   const styles = useThemedStyles(makeStyles);
   const options = [
     { key: 'note', icon: '📝', label: 'Note', hide: !!node?.note },
+    { key: 'link', icon: '🔗', label: 'Link', hide: !!node?.link },
     { key: 'timer', icon: '⏱', label: 'Timer', hide: node?.goalHours != null || node?.startMs != null },
     { key: 'counter', icon: '🔢', label: 'Counter', hide: node?.count != null },
     { key: 'due', icon: '📅', label: 'Due date', hide: node?.dueAt != null },

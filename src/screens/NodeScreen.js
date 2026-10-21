@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   AppState,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ReorderableList from 'react-native-reorderable-list';
@@ -88,6 +89,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [note, setNote] = useState(node?.note ?? '');
+  const [link, setLink] = useState(node?.link ?? '');
   const [reminders, setReminders] = useState(normalizeReminders(node?.reminders));
   const [addingDetail, setAddingDetail] = useState(false);
   // Picking things to move or copy. `intent` is null when not selecting, and
@@ -233,8 +235,13 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
     updateNode(node, { note: trimmed });
   }, [node, note, updateNode]);
 
-  const flushRef = useRef(saveNote);
-  flushRef.current = saveNote;
+  // Both fields, or backgrounding the app with a half-typed link would lose
+  // it while the note beside it survived.
+  const flushRef = useRef(null);
+  flushRef.current = () => {
+    saveNote();
+    saveLink();
+  };
 
   // Leaving the foreground is the one exit a debounce can't cover: the process
   // can be killed while a write is still pending, and nothing else would run.
@@ -246,6 +253,76 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   }, []);
 
   useEffect(() => () => flushRef.current(), []);
+
+  // ---- Link ---------------------------------------------------------------
+
+  // Same debounce-and-adopt arrangement as Note, and for the same reason:
+  // this screen is reused rather than remounted as you move around, so a
+  // snapshot can swap the node underneath an unsaved field.
+  const linkTimer = useRef(null);
+  const linkDirty = useRef(false);
+
+  const handleLinkChange = useCallback(
+    (text) => {
+      setLink(text);
+      linkDirty.current = true;
+      const target = node;
+      clearTimeout(linkTimer.current);
+      linkTimer.current = setTimeout(() => {
+        linkTimer.current = null;
+        linkDirty.current = false;
+        const trimmed = text.trim();
+        if (target && trimmed !== (target.link ?? '')) {
+          updateNode(target, { link: trimmed });
+        }
+      }, 600);
+    },
+    [node, updateNode]
+  );
+
+  useEffect(() => {
+    if (linkDirty.current) return;
+    setLink(node?.link ?? '');
+  }, [node?.id, node?.link]);
+
+  useEffect(() => {
+    linkDirty.current = false;
+    setLink(node?.link ?? '');
+  }, [node?.id]);
+
+  const saveLink = useCallback(() => {
+    clearTimeout(linkTimer.current);
+    linkTimer.current = null;
+    linkDirty.current = false;
+    if (!node) return;
+    const trimmed = link.trim();
+    if (trimmed === (node.link ?? '')) return;
+    updateNode(node, { link: trimmed });
+  }, [node, link, updateNode]);
+
+  /**
+   * Open it, adding a scheme if whoever typed it did not.
+   *
+   * People write "example.com", and openURL refuses a string with no scheme
+   * rather than guessing - so a perfectly good link would do nothing at all.
+   * Anything that already names a scheme is left alone, so mailto: and tel:
+   * still work.
+   */
+  const openLink = useCallback(async () => {
+    const raw = link.trim();
+    if (!raw) return;
+    const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) ? raw : `https://${raw}`;
+    try {
+      await Linking.openURL(url);
+    } catch (e) {
+      VibeAlert(
+        'Could not open that',
+        `Nothing on this phone handles ${url}.`,
+        [],
+        'error'
+      );
+    }
+  }, [link]);
 
   // ---- Reminders ----------------------------------------------------------
 
@@ -344,6 +421,7 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
   const hasDetails = !isRoot && !isContainer;
 
   const showNote = !!node?.note || revealed.note;
+  const showLink = !!node?.link || revealed.link;
   const showRepeat = !!node?.repeat || revealed.repeat;
   const showReminders = !!node?.reminders?.length || revealed.reminder;
 
@@ -577,6 +655,41 @@ export default function NodeScreen({ node, onOpen, onBack, onReplace }) {
                     autoFocus={!node.note}
                     style={styles.note}
                   />
+                </>
+              )}
+
+              {showLink && (
+                <>
+                  <Text style={styles.label}>Link</Text>
+                  <View style={styles.linkRow}>
+                    <VibeInput
+                      value={link}
+                      onChangeText={handleLinkChange}
+                      onBlur={saveLink}
+                      placeholder="example.com"
+                      keyboardType="url"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      maxLength={500}
+                      autoFocus={!node.link}
+                      style={styles.linkInput}
+                    />
+                    {/* Only once there is something to open. A dead Open
+                        button beside an empty field is a thing to wonder
+                        about rather than a thing to use. */}
+                    {link.trim() ? (
+                      <Pressable
+                        onPress={openLink}
+                        hitSlop={8}
+                        style={({ pressed }) => [
+                          styles.linkOpen,
+                          pressed && { opacity: 0.6 },
+                        ]}
+                      >
+                        <Text style={styles.linkOpenText}>Open</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </>
               )}
 
@@ -934,6 +1047,22 @@ const makeStyles = (t) => ({
     fontFamily: t.fonts.main,
   },
   note: { minHeight: 90, textAlignVertical: 'top' },
+  // The field and its Open button on one line, the field taking whatever
+  // the button does not.
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  linkInput: { flex: 1 },
+  linkOpen: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: t.sizes.borderRadius,
+    borderWidth: 2,
+    borderColor: t.colors.vibeBlue,
+  },
+  linkOpenText: {
+    color: t.colors.vibeBlue,
+    fontWeight: '700',
+    fontFamily: t.fonts.main,
+  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingVertical: 8, paddingHorizontal: 16 },
   addLink: {

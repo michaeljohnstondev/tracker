@@ -100,6 +100,7 @@ export function NodeCardView({
           </Text>
           {node.shared ? <Text style={styles.badge}>👥</Text> : null}
           {node.note ? <Text style={styles.badge}>📝</Text> : null}
+          {node.link ? <Text style={styles.badge}>🔗</Text> : null}
           {node.reminders?.length ? <Text style={styles.badge}>🔔</Text> : null}
         </View>
         {bits.length > 0 && (

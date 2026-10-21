@@ -65,6 +65,10 @@ function toRemote(node, rootId) {
     doneAt: node.doneAt ?? null,
     doneBy: node.doneBy ?? null,
     note: node.note ?? '',
+    // Shared like everything else. A link is part of the item, so leaving it
+    // out of the serializer would have dropped it the moment a list was
+    // shared - the same way kind used to turn a folder into a task.
+    link: node.link ?? '',
     startMs: node.startMs ?? null,
     goalHours: node.goalHours ?? null,
     count: node.count ?? null,
